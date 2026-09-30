@@ -271,6 +271,9 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	private fun updateEmptyFolderHint() {
+		binding.rlViewEmptyFolder.tvEmptyFolderHint.setText(
+			if (filterText.isEmpty()) R.string.screen_file_browser_msg_empty_folder else R.string.screen_file_browser_msg_no_matching_items
+		)
 		binding.rlViewEmptyFolder.emptyFolderHint.visibility = if (cloudNodesAdapter.isEmpty) VISIBLE else GONE
 	}
 
