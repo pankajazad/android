@@ -42,6 +42,7 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	private var navigationMode: ChooseCloudNodeSettings.NavigationMode? = null
 
 	private var filterText: String = ""
+	private val allCloudNodes = mutableListOf<CloudNodeModel<*>>()
 
 	var folder: CloudFolderModel
 		get() = requireArguments().getSerializable(ARG_FOLDER) as CloudFolderModel
@@ -177,8 +178,13 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	fun show(nodes: List<CloudNodeModel<*>>?) {
-		cloudNodesAdapter.clear()
-		cloudNodesAdapter.addAll(cloudNodesAdapter.filterNodes(nodes, filterText))
+		allCloudNodes.clear()
+		allCloudNodes.addAll(nodes.orEmpty())
+		renderCloudNodes()
+	}
+
+	private fun renderCloudNodes() {
+		cloudNodesAdapter.replaceAll(cloudNodesAdapter.filterNodes(allCloudNodes, filterText))
 		updateEmptyFolderHint()
 	}
 
@@ -232,8 +238,8 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	fun remove(cloudNode: List<CloudNodeModel<*>>?) {
-		cloudNodesAdapter.deleteItems(cloudNode)
-		updateEmptyFolderHint()
+		allCloudNodes.removeAll(cloudNode.orEmpty())
+		renderCloudNodes()
 	}
 
 	private fun viewHolderFor(nodeModel: CloudNodeModel<*>?): Optional<BrowseFilesAdapter.VaultContentViewHolder> {
@@ -242,7 +248,12 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	fun replaceRenamedCloudFile(cloudFile: CloudNodeModel<out CloudNode>) {
-		cloudNodesAdapter.replaceRenamedCloudFile(cloudFile)
+		val oldName = cloudFile.oldName
+		val index = allCloudNodes.indexOfFirst { it.javaClass == cloudFile.javaClass && it.name == oldName }
+		if (index >= 0) {
+			allCloudNodes[index] = cloudFile
+			renderCloudNodes()
+		}
 	}
 
 	fun showLoading(loading: Boolean?) {
@@ -250,8 +261,13 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	fun addOrUpdate(cloudNode: CloudNodeModel<*>) {
-		cloudNodesAdapter.addOrReplaceCloudNode(cloudNode)
-		updateEmptyFolderHint()
+		val index = allCloudNodes.indexOf(cloudNode)
+		if (index >= 0) {
+			allCloudNodes[index] = cloudNode
+		} else {
+			allCloudNodes.add(cloudNode)
+		}
+		renderCloudNodes()
 	}
 
 	private fun updateEmptyFolderHint() {
@@ -289,6 +305,7 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 
 	fun setFilterText(query: String) {
 		filterText = query
+		renderCloudNodes()
 	}
 
 	fun setSort(comparator: Comparator<CloudNodeModel<*>>) {

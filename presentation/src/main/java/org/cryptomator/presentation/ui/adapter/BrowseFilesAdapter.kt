@@ -7,7 +7,6 @@ import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.view.ViewGroup
 import com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
-import org.cryptomator.domain.CloudNode
 import org.cryptomator.presentation.R
 import org.cryptomator.presentation.databinding.ItemBrowseFilesNodeBinding
 import org.cryptomator.presentation.intent.ChooseCloudNodeSettings
@@ -55,24 +54,6 @@ constructor(
 		return ItemBrowseFilesNodeBinding.inflate(inflater, parent, false)
 	}
 
-	fun addOrReplaceCloudNode(cloudNodeModel: CloudNodeModel<*>) {
-		if (contains(cloudNodeModel)) {
-			replaceItem(cloudNodeModel)
-		} else {
-			addItem(cloudNodeModel)
-		}
-	}
-
-	fun replaceRenamedCloudFile(cloudNode: CloudNodeModel<out CloudNode>) {
-		itemCollection.forEach { nodes ->
-			if (nodes.javaClass == cloudNode.javaClass && nodes.name == cloudNode.oldName) {
-				val position = positionOf(nodes)
-				replaceItem(position, cloudNode)
-				return
-			}
-		}
-	}
-
 	override fun setCallback(callback: ItemClickListener) {
 		this.callback = callback
 	}
@@ -103,12 +84,12 @@ constructor(
 		return itemCount > selectedCloudNodes().size
 	}
 
-	fun filterNodes(nodes: List<CloudNodeModel<*>>?, filterText: String): List<CloudNodeModel<*>>? {
+	fun filterNodes(nodes: List<CloudNodeModel<*>>, filterText: String): List<CloudNodeModel<*>> {
 		return if (filterText.isNotEmpty()) {
 			if (sharedPreferencesHandler.useGlobSearch()) {
-				nodes?.filter { cloudNode -> PatternMatcher(filterText, PatternMatcher.PATTERN_SIMPLE_GLOB).match(cloudNode.name) }
+				nodes.filter { cloudNode -> PatternMatcher(filterText, PatternMatcher.PATTERN_SIMPLE_GLOB).match(cloudNode.name) }
 			} else {
-				nodes?.filter { cloudNode -> FileNameSearch.matches(cloudNode.name, filterText) }
+				nodes.filter { cloudNode -> FileNameSearch.matches(cloudNode.name, filterText) }
 			}
 		} else {
 			nodes

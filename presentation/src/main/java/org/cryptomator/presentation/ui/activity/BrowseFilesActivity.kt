@@ -608,16 +608,12 @@ class BrowseFilesActivity : BaseActivity<ActivityLayoutBinding>(ActivityLayoutBi
 	}
 
 	override fun onQueryTextChange(query: String?): Boolean {
-		if (sharedPreferencesHandler.useLiveSearch()) {
-			updateFilter(query)
-		}
+		updateFilter(query)
 		return false
 	}
 
 	private fun updateFilter(query: String?) {
-		showLoading(true)
 		browseFilesFragment().setFilterText(query.orEmpty())
-		browseFilesPresenter.onFolderReloadContent(folder)
 	}
 
 	override fun onClose(): Boolean {

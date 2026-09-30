@@ -67,6 +67,13 @@ public abstract class RecyclerViewBaseAdapter<Item, Callback, ViewHolder extends
 		notifyDataSetChanged();
 	}
 
+	public void replaceAll(Collection<? extends Item> items) {
+		itemCollection.clear();
+		itemCollection.addAll(items);
+		sort();
+		notifyDataSetChanged();
+	}
+
 	public List<Item> getAll() {
 		return itemCollection;
 	}
