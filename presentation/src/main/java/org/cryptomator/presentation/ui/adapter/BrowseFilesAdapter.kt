@@ -26,6 +26,7 @@ import org.cryptomator.presentation.model.comparator.CloudNodeModelSizeSmallestF
 import org.cryptomator.presentation.ui.adapter.BrowseFilesAdapter.VaultContentViewHolder
 import org.cryptomator.presentation.util.DateHelper
 import org.cryptomator.presentation.util.FileIcon
+import org.cryptomator.presentation.util.FileNameSearch
 import org.cryptomator.presentation.util.FileSizeHelper
 import org.cryptomator.presentation.util.FileUtil
 import org.cryptomator.presentation.util.ResourceHelper.Companion.getDrawable
@@ -107,7 +108,7 @@ constructor(
 			if (sharedPreferencesHandler.useGlobSearch()) {
 				nodes?.filter { cloudNode -> PatternMatcher(filterText, PatternMatcher.PATTERN_SIMPLE_GLOB).match(cloudNode.name) }
 			} else {
-				nodes?.filter { cloudNode -> cloudNode.name.contains(filterText, true) }
+				nodes?.filter { cloudNode -> FileNameSearch.matches(cloudNode.name, filterText) }
 			}
 		} else {
 			nodes
