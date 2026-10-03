@@ -43,6 +43,7 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 
 	private var filterText: String = ""
 	private val allCloudNodes = mutableListOf<CloudNodeModel<*>>()
+	private var recursiveSearchCloudNodes: List<CloudNodeModel<*>>? = null
 
 	var folder: CloudFolderModel
 		get() = requireArguments().getSerializable(ARG_FOLDER) as CloudFolderModel
@@ -183,8 +184,19 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 		renderCloudNodes()
 	}
 
+	fun showRecursiveSearchResults(nodes: List<CloudNodeModel<*>>) {
+		recursiveSearchCloudNodes = nodes
+		renderCloudNodes()
+	}
+
+	fun clearRecursiveSearchResults() {
+		recursiveSearchCloudNodes = null
+		renderCloudNodes()
+	}
+
 	private fun renderCloudNodes() {
-		cloudNodesAdapter.replaceAll(cloudNodesAdapter.filterNodes(allCloudNodes, filterText))
+		val nodesToFilter = if (filterText.isNotEmpty()) recursiveSearchCloudNodes ?: allCloudNodes else allCloudNodes
+		cloudNodesAdapter.replaceAll(cloudNodesAdapter.filterNodes(nodesToFilter, filterText))
 		updateEmptyFolderHint()
 	}
 
@@ -238,7 +250,9 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	fun remove(cloudNode: List<CloudNodeModel<*>>?) {
-		allCloudNodes.removeAll(cloudNode.orEmpty())
+		val nodesToRemove = cloudNode.orEmpty()
+		allCloudNodes.removeAll(nodesToRemove)
+		recursiveSearchCloudNodes = recursiveSearchCloudNodes?.filterNot { it in nodesToRemove }
 		renderCloudNodes()
 	}
 
@@ -252,8 +266,11 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 		val index = allCloudNodes.indexOfFirst { it.javaClass == cloudFile.javaClass && it.name == oldName }
 		if (index >= 0) {
 			allCloudNodes[index] = cloudFile
-			renderCloudNodes()
 		}
+		recursiveSearchCloudNodes = recursiveSearchCloudNodes?.map { node ->
+			if (node.javaClass == cloudFile.javaClass && node.name == oldName) cloudFile else node
+		}
+		renderCloudNodes()
 	}
 
 	fun showLoading(loading: Boolean?) {
@@ -261,13 +278,22 @@ class BrowseFilesFragment : BaseFragment<FragmentBrowseFilesBinding>(FragmentBro
 	}
 
 	fun addOrUpdate(cloudNode: CloudNodeModel<*>) {
-		val index = allCloudNodes.indexOf(cloudNode)
-		if (index >= 0) {
-			allCloudNodes[index] = cloudNode
-		} else {
-			allCloudNodes.add(cloudNode)
+		addOrReplace(allCloudNodes, cloudNode)
+		recursiveSearchCloudNodes?.let { nodes ->
+			val updatedNodes = nodes.toMutableList()
+			addOrReplace(updatedNodes, cloudNode)
+			recursiveSearchCloudNodes = updatedNodes
 		}
 		renderCloudNodes()
+	}
+
+	private fun addOrReplace(nodes: MutableList<CloudNodeModel<*>>, cloudNode: CloudNodeModel<*>) {
+		val index = nodes.indexOf(cloudNode)
+		if (index >= 0) {
+			nodes[index] = cloudNode
+		} else {
+			nodes.add(cloudNode)
+		}
 	}
 
 	private fun updateEmptyFolderHint() {

@@ -32,6 +32,7 @@ import org.cryptomator.domain.usecases.cloud.DownloadFilesUseCase
 import org.cryptomator.domain.usecases.cloud.DownloadState
 import org.cryptomator.domain.usecases.cloud.GetCloudListRecursiveUseCase
 import org.cryptomator.domain.usecases.cloud.GetCloudListUseCase
+import org.cryptomator.domain.usecases.cloud.GetCloudNodeListRecursiveUseCase
 import org.cryptomator.domain.usecases.cloud.MoveFilesUseCase
 import org.cryptomator.domain.usecases.cloud.MoveFoldersUseCase
 import org.cryptomator.domain.usecases.cloud.Progress
@@ -95,6 +96,7 @@ import timber.log.Timber
 @PerView
 class BrowseFilesPresenter @Inject constructor( //
 	private val getCloudListUseCase: GetCloudListUseCase,  //
+	private val getCloudNodeListRecursiveUseCase: GetCloudNodeListRecursiveUseCase,  //
 	private val createFolderUseCase: CreateFolderUseCase,  //
 	private val downloadFilesUseCase: DownloadFilesUseCase,  //
 	private val deleteNodesUseCase: DeleteNodesUseCase,  //
@@ -136,6 +138,10 @@ class BrowseFilesPresenter @Inject constructor( //
 	private lateinit var downloadFiles: MutableList<DownloadFile>
 
 	private var resumedAfterAuthentication = false
+	private var searchQuery = ""
+	private var recursiveSearchFolder: CloudFolderModel? = null
+	private var recursiveSearchResults: List<CloudNodeModel<*>>? = null
+	private var recursiveSearchInProgress = false
 
 	@InjectIntent
 	lateinit var intent: BrowseFilesIntent
@@ -184,14 +190,70 @@ class BrowseFilesPresenter @Inject constructor( //
 	}
 
 	fun onFolderDisplayed(folder: CloudFolderModel) {
+		searchQuery = ""
+		clearRecursiveSearchCache()
 		view?.showLoading(true)
 		getCloudList(folder)
 		view?.updateTitle(folder)
 	}
 
 	fun onRefreshTriggered(cloudModel: CloudFolderModel) {
+		clearRecursiveSearchCache()
 		view?.showLoading(true)
 		getCloudList(cloudModel)
+	}
+
+	fun onSearchQueryChanged(folder: CloudFolderModel, query: String) {
+		searchQuery = query
+		if (query.isEmpty()) {
+			cancelRecursiveSearch()
+			return
+		}
+		if (recursiveSearchFolder == folder && recursiveSearchResults != null) {
+			view?.showRecursiveSearchResults(recursiveSearchResults!!)
+			return
+		}
+		if (recursiveSearchInProgress && recursiveSearchFolder == folder) {
+			return
+		}
+		startRecursiveSearch(folder)
+	}
+
+	private fun startRecursiveSearch(folder: CloudFolderModel) {
+		getCloudNodeListRecursiveUseCase.unsubscribe()
+		recursiveSearchFolder = folder
+		recursiveSearchResults = null
+		recursiveSearchInProgress = true
+		getCloudNodeListRecursiveUseCase //
+			.withRootFolder(folder.toCloudNode()) //
+			.run(object : DefaultResultHandler<List<CloudNode>>() {
+				override fun onSuccess(cloudNodes: List<CloudNode>) {
+					recursiveSearchResults = cloudNodeModelMapper.toModels(cloudNodes).filterNot(::isBlacklistedCloudNode)
+					view?.showRecursiveSearchResults(recursiveSearchResults!!)
+				}
+
+				override fun onFinished() {
+					recursiveSearchInProgress = false
+				}
+			})
+	}
+
+	private fun restartRecursiveSearchIfNeeded(folder: CloudFolderModel) {
+		if (searchQuery.isNotEmpty() && view?.folder == folder && !recursiveSearchInProgress) {
+			startRecursiveSearch(folder)
+		}
+	}
+
+	private fun cancelRecursiveSearch() {
+		getCloudNodeListRecursiveUseCase.unsubscribe()
+		recursiveSearchInProgress = false
+	}
+
+	private fun clearRecursiveSearchCache() {
+		cancelRecursiveSearch()
+		recursiveSearchFolder = null
+		recursiveSearchResults = null
+		view?.clearRecursiveSearchResults()
 	}
 
 	private fun getCloudList(cloudFolderModel: CloudFolderModel) {
@@ -204,6 +266,7 @@ class BrowseFilesPresenter @Inject constructor( //
 					} else {
 						showCloudNodesCollectionInView(cloudNodes)
 					}
+					restartRecursiveSearchIfNeeded(cloudFolderModel)
 					view?.showLoading(false)
 				}
 
@@ -898,6 +961,8 @@ class BrowseFilesPresenter @Inject constructor( //
 	}
 
 	fun onFolderClicked(cloudFolderModel: CloudFolderModel) {
+		searchQuery = ""
+		clearRecursiveSearchCache()
 		unsubscribeAll()
 		view?.navigateTo(cloudFolderModel)
 	}
@@ -1223,6 +1288,7 @@ class BrowseFilesPresenter @Inject constructor( //
 
 	fun onFolderReloadContent(folder: CloudFolderModel) {
 		if (!resumedAfterAuthentication) {
+			clearRecursiveSearchCache()
 			getCloudList(folder)
 		}
 	}
@@ -1288,6 +1354,7 @@ class BrowseFilesPresenter @Inject constructor( //
 	init {
 		unsubscribeOnDestroy( //
 			getCloudListUseCase,  //
+			getCloudNodeListRecursiveUseCase,  //
 			createFolderUseCase,  //
 			downloadFilesUseCase,  //
 			deleteNodesUseCase,  //

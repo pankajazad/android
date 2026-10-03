@@ -472,6 +472,14 @@ class BrowseFilesActivity : BaseActivity<ActivityLayoutBinding>(ActivityLayoutBi
 		browseFilesFragment().show(nodes)
 	}
 
+	override fun showRecursiveSearchResults(nodes: List<CloudNodeModel<*>>) {
+		browseFilesFragment().showRecursiveSearchResults(nodes)
+	}
+
+	override fun clearRecursiveSearchResults() {
+		browseFilesFragment().clearRecursiveSearchResults()
+	}
+
 	override fun addOrUpdateCloudNode(node: CloudNodeModel<*>) {
 		browseFilesFragment().addOrUpdate(node)
 	}
@@ -613,7 +621,9 @@ class BrowseFilesActivity : BaseActivity<ActivityLayoutBinding>(ActivityLayoutBi
 	}
 
 	private fun updateFilter(query: String?) {
-		browseFilesFragment().setFilterText(query.orEmpty())
+		val filterText = query.orEmpty()
+		browseFilesFragment().setFilterText(filterText)
+		browseFilesPresenter.onSearchQueryChanged(folder, filterText)
 	}
 
 	override fun onClose(): Boolean {
