@@ -91,7 +91,12 @@ jobs:
           config = pathlib.Path('buildsystem/dependencies.gradle').read_text()
           compile_sdk = re.search(r'androidCompileSdkVersion\s*=\s*(\d+)', config).group(1)
           build_tools = re.search(r'androidBuildToolsVersion\s*=\s*[\x22\x27]([^\x22\x27]+)', config).group(1)
-          subprocess.run(['sdkmanager', f'platforms;android-{compile_sdk}', f'build-tools;{build_tools}'], check=True)
+          try:
+              subprocess.run(['android', 'sdk', 'install', f'platforms/android-{compile_sdk}', f'build-tools/{build_tools}'], check=True)
+          except subprocess.CalledProcessError:
+              subprocess.run(['android', 'sdk', 'list', '--all', 'platforms/*'], check=False)
+              subprocess.run(['android', 'sdk', 'list', '--all', 'build-tools/*'], check=False)
+              raise
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'build-tools={build_tools}\n')
           PY
