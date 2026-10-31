@@ -45,18 +45,14 @@ import org.cryptomator.presentation.model.CloudTypeModel
 import org.cryptomator.presentation.model.ProgressModel
 import org.cryptomator.presentation.model.VaultModel
 import org.cryptomator.presentation.model.mappers.CloudFolderModelMapper
-import org.cryptomator.presentation.service.ProductPrices
 import org.cryptomator.presentation.service.ProductPricesCache
 import org.cryptomator.presentation.service.SalePromo
-import org.cryptomator.presentation.service.resolveSalePromo
 import org.cryptomator.presentation.ui.activity.WelcomeActivity
 import org.cryptomator.presentation.ui.activity.view.VaultListView
 import org.cryptomator.presentation.ui.dialog.AppIsObscuredInfoDialog
 import org.cryptomator.presentation.ui.dialog.AskForLockScreenDialog
 import org.cryptomator.presentation.ui.dialog.CBCPasswordVaultsMigrationDialog
 import org.cryptomator.presentation.ui.dialog.EnterPasswordDialog
-import org.cryptomator.presentation.ui.dialog.LicenseLostDialog
-import org.cryptomator.presentation.ui.dialog.TrialExpiredDialog
 import org.cryptomator.presentation.ui.dialog.UpdateAppAvailableDialog
 import org.cryptomator.presentation.ui.dialog.UpdateAppDialog
 import org.cryptomator.presentation.ui.dialog.VaultsRemovedDuringMigrationDialog
@@ -70,7 +66,6 @@ import org.cryptomator.presentation.workflow.Workflow
 import org.cryptomator.util.FlavorConfig
 import org.cryptomator.util.SharedPreferencesHandler
 import org.cryptomator.util.crypto.CryptoMode
-import java.util.function.Consumer
 import javax.inject.Inject
 import timber.log.Timber
 
@@ -102,11 +97,6 @@ class VaultListPresenter @Inject constructor( //
 ) : Presenter<VaultListView>(exceptionMappings) {
 
 	private var vaultAction: VaultAction? = null
-	private val licenseChangeListener = Consumer<String> { _ ->
-		if (!isPaused) {
-			updateSalePromo()
-		}
-	}
 
 	override fun workflows(): Iterable<Workflow<*>> {
 		return listOf(addExistingVaultWorkflow, createNewVaultWorkflow)
@@ -117,17 +107,7 @@ class VaultListPresenter @Inject constructor( //
 			return
 		}
 
-		if (FlavorConfig.isFreemiumFlavor) {
-			val alreadyKnownExpired = sharedPreferencesHandler.isTrialExpired()
-			val trialState = licenseEnforcer.evaluateTrialState()
-			if (!alreadyKnownExpired && trialState.isExpired && !licenseEnforcer.hasPaidLicense()) {
-				view?.showDialog(TrialExpiredDialog.newInstance())
-			}
-			// Invokes the listener right away, so this also evaluates the sale promo on resume.
-			sharedPreferencesHandler.addLicenseChangedListeners(licenseChangeListener)
-		}
-
-		showLicenseLostDialogIfNeeded()
+		view?.hideSalePromoBanner()
 	}
 
 	private fun launchWelcomeFlowIfNeeded(): Boolean {
@@ -141,47 +121,9 @@ class VaultListPresenter @Inject constructor( //
 		return false
 	}
 
-	// While Accrescent counted as a premium flavor, Upgrade13To14 dropped its users' license token but kept their mail.
-	// Clearing the mail shows the dialog only once and stops Settings from presenting the lost license as active.
-	private fun showLicenseLostDialogIfNeeded() {
-		if (FlavorConfig.isAccrescentFlavor && sharedPreferencesHandler.licenseToken().isEmpty()) {
-			val mail = sharedPreferencesHandler.mail()
-			if (mail.isNotEmpty()) {
-				sharedPreferencesHandler.setMail("")
-				view?.showDialog(LicenseLostDialog.newInstance(mail))
-			}
-		}
-	}
-
-	private fun updateSalePromo() {
-		if (licenseEnforcer.hasPaidLicense()) {
-			view?.hideSalePromoBanner()
-		} else {
-			loadSalePromo()
-		}
-	}
-
-	private fun loadSalePromo() {
-		productPricesCache.queryProductPrices { prices ->
-			activity().runOnUiThread {
-				if (!isPaused) {
-					showOrHideSalePromoBanner(prices)
-				}
-			}
-		}
-	}
-
-	private fun showOrHideSalePromoBanner(prices: ProductPrices) {
-		val salePromo = prices.resolveSalePromo(sharedPreferencesHandler.salePromoDismissedUntil(), System.currentTimeMillis())
-		if (salePromo != null && !licenseEnforcer.hasPaidLicense()) {
-			view?.showSalePromoBanner(salePromo)
-		} else {
-			view?.hideSalePromoBanner()
-		}
-	}
-
 	fun onUnlockFullVersionClicked() {
-		Intents.licenseCheckIntent().startActivity(this)
+		// Kept for existing view callbacks; this fork already provides full access.
+		view?.hideSalePromoBanner()
 	}
 
 	fun onSalePromoBannerDismissed(salePromo: SalePromo) {

@@ -34,23 +34,23 @@ class CloudRepositoryImplTest {
 
 	@Test
 	fun testStoringBoxCloudKeepsStoredTokens() {
-		inTest.store(BoxCloud.aBoxCloud().withId(7L).withUserId("userId").withUsername("new@example.com").build())
+		inTest.store(BoxCloud.aBoxCloud().withId(7L).withUserId("userId").withUsername("pankajhere@outlook.in").build())
 
 		val entity = storedEntity()
 		assertThat(entity.accessToken, `is`("rotatedTokens"))
-		assertThat(entity.username, `is`("new@example.com"))
+		assertThat(entity.username, `is`("pankajhere@outlook.in"))
 	}
 
 	@Test
 	fun testStoringNewBoxCloudStoresNoTokens() {
-		inTest.store(BoxCloud.aBoxCloud().withUserId("userId").withUsername("user@example.com").build())
+		inTest.store(BoxCloud.aBoxCloud().withUserId("userId").withUsername("pankajhere@outlook.in").build())
 
 		assertThat(storedEntity().accessToken, `is`(nullValue()))
 	}
 
 	@Test
 	fun testStoringOtherCloudStoresItsToken() {
-		inTest.store(PCloud.aPCloud().withId(8L).withAccessToken("pCloudToken").withUrl("api.pcloud.com").withUsername("user@example.com").build())
+		inTest.store(PCloud.aPCloud().withId(8L).withAccessToken("pCloudToken").withUrl("api.pcloud.com").withUsername("pankajhere@outlook.in").build())
 
 		assertThat(storedEntity().accessToken, `is`("pCloudToken"))
 	}
@@ -67,7 +67,7 @@ class CloudRepositoryImplTest {
 		entity.type = CloudType.BOX.name
 		entity.accessToken = "rotatedTokens"
 		entity.url = "userId"
-		entity.username = "user@example.com"
+		entity.username = "stored-user"
 		return entity
 	}
 }

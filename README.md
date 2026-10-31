@@ -1,5 +1,11 @@
 ![cryptomator-android](cryptomator-android.png)
 
+## This fork
+
+All local app features are available without a license key, trial, or in-app purchase. Support and security reports for this fork go to pankajhere@outlook.in.
+
+Cloud services still require their own account authentication and, where applicable, the API keys described below. Vault passwords, encryption, and cloud access permissions continue to apply.
+
 [![Mastodon](https://img.shields.io/mastodon/follow/176112?domain=mastodon.online&style=flat)](https://mastodon.online/@cryptomator)
 [![Community](https://img.shields.io/badge/help-Community-orange.svg)](https://community.cryptomator.org)
 [![Documentation](https://img.shields.io/badge/help-Docs-orange.svg)](https://docs.cryptomator.org)
@@ -76,4 +82,4 @@ Help us keep Cryptomator open and inclusive. Please read and follow our [Code of
 
 ## License
 
-This project is dual-licensed under the GPLv3 for FOSS projects as well as a commercial license for independent software vendors and resellers. If you want to modify this application under different conditions, feel free to contact our support team.
+This fork is distributed under the GPLv3; see [LICENSE.txt](LICENSE.txt). Upstream Cryptomator is dual-licensed under the GPLv3 and a separate commercial license. Alternative licensing for upstream code must be obtained from its copyright holders.

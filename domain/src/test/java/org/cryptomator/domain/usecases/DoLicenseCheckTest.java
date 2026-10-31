@@ -62,7 +62,7 @@ public class DoLicenseCheckTest {
 		@DisplayName("Non-empty license stores token in preferences")
 		void nonEmptyLicenseSetsPreference() throws Exception {
 			KeyPair keyPair = generateEcKeyPair();
-			String token = signJwt(keyPair, "user@example.com");
+			String token = signJwt(keyPair, "pankajhere@outlook.in");
 
 			try (MockedStatic<Algorithm> algorithmMock = mockAlgorithmWithKey(keyPair)) {
 				DoLicenseCheck inTest = testCandidate(token);
@@ -76,7 +76,7 @@ public class DoLicenseCheckTest {
 		@DisplayName("Non-empty license does not read from preferences")
 		void nonEmptyLicenseSkipsPreferenceLookup() throws Exception {
 			KeyPair keyPair = generateEcKeyPair();
-			String token = signJwt(keyPair, "user@example.com");
+			String token = signJwt(keyPair, "pankajhere@outlook.in");
 
 			try (MockedStatic<Algorithm> algorithmMock = mockAlgorithmWithKey(keyPair)) {
 				DoLicenseCheck inTest = testCandidate(token);
@@ -104,7 +104,7 @@ public class DoLicenseCheckTest {
 		@DisplayName("Well-formed JWT signed with wrong key throws LicenseNotValidException")
 		void jwtSignedWithWrongKey() throws Exception {
 			KeyPair wrongKeyPair = generateEcKeyPair();
-			String token = signJwt(wrongKeyPair, "attacker@example.com");
+			String token = signJwt(wrongKeyPair, "pankajhere@outlook.in");
 
 			DoLicenseCheck inTest = testCandidate(token);
 
@@ -116,7 +116,7 @@ public class DoLicenseCheckTest {
 		@DisplayName("Corrupted base64 in JWT body throws LicenseNotValidException")
 		void corruptedBase64InJwtBody() throws Exception {
 			KeyPair keyPair = generateEcKeyPair();
-			String validToken = signJwt(keyPair, "user@example.com");
+			String validToken = signJwt(keyPair, "pankajhere@outlook.in");
 			// Corrupt the payload section (second segment)
 			String[] parts = validToken.split("\\.");
 			parts[1] = "!!!invalid-base64!!!";
@@ -146,27 +146,28 @@ public class DoLicenseCheckTest {
 		@DisplayName("JWT signed with matching key returns LicenseCheck with correct mail")
 		void validJwtReturnsLicenseCheckWithMail() throws Exception {
 			KeyPair keyPair = generateEcKeyPair();
-			String token = signJwt(keyPair, "user@example.com");
+			String token = signJwt(keyPair, "pankajhere@outlook.in");
 
 			try (MockedStatic<Algorithm> algorithmMock = mockAlgorithmWithKey(keyPair)) {
 				DoLicenseCheck inTest = testCandidate(token);
 				LicenseCheck result = inTest.execute();
 
-				assertThat(result.mail(), is("user@example.com"));
+				assertThat(result.mail(), is("pankajhere@outlook.in"));
 			}
 		}
 
 		@Test
-		@DisplayName("JWT subject with special characters is returned correctly")
-		void validJwtWithSpecialCharSubject() throws Exception {
+		@DisplayName("JWT subject preserves the configured contact address when the token is stored")
+		void validJwtPreservesConfiguredContact() throws Exception {
 			KeyPair keyPair = generateEcKeyPair();
-			String token = signJwt(keyPair, "user+tag@example.co.uk");
+			String token = signJwt(keyPair, "pankajhere@outlook.in");
 
 			try (MockedStatic<Algorithm> algorithmMock = mockAlgorithmWithKey(keyPair)) {
 				DoLicenseCheck inTest = testCandidate(token);
 				LicenseCheck result = inTest.execute();
 
-				assertThat(result.mail(), is("user+tag@example.co.uk"));
+				assertThat(result.mail(), is("pankajhere@outlook.in"));
+				verify(sharedPreferencesHandler).setLicenseToken(token);
 			}
 		}
 
@@ -174,14 +175,14 @@ public class DoLicenseCheckTest {
 		@DisplayName("Valid token retrieved from preferences returns LicenseCheck")
 		void validTokenFromPreferencesReturnsLicenseCheck() throws Exception {
 			KeyPair keyPair = generateEcKeyPair();
-			String token = signJwt(keyPair, "stored@example.com");
+			String token = signJwt(keyPair, "pankajhere@outlook.in");
 			when(sharedPreferencesHandler.licenseToken()).thenReturn(token);
 
 			try (MockedStatic<Algorithm> algorithmMock = mockAlgorithmWithKey(keyPair)) {
 				DoLicenseCheck inTest = testCandidate("");
 				LicenseCheck result = inTest.execute();
 
-				assertThat(result.mail(), is("stored@example.com"));
+				assertThat(result.mail(), is("pankajhere@outlook.in"));
 			}
 		}
 	}
@@ -194,7 +195,7 @@ public class DoLicenseCheckTest {
 		@DisplayName("JWT signed with desktop supporter key throws DesktopSupporterCertificateException")
 		void desktopSupporterCertificateDetected() throws Exception {
 			KeyPair desktopKeyPair = generateEcKeyPair();
-			String token = signJwt(desktopKeyPair, "supporter@example.com");
+			String token = signJwt(desktopKeyPair, "pankajhere@outlook.in");
 
 			// execute() calls ECDSA512 twice: first for android key (fails verification),
 			// then isDesktopSupporterCertificate calls it again for the desktop key (succeeds).

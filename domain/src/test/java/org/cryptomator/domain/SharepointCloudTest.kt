@@ -9,7 +9,7 @@ class SharepointCloudTest {
 	private val cloud = SharepointCloud.aSharepointCloud() //
 		.withId(42L) //
 		.withAccessToken("accessToken") //
-		.withUsername("user@contoso.com") //
+		.withUsername("pankajhere@outlook.in") //
 		.withSiteUrl("https://contoso.sharepoint.com/sites/team") //
 		.withDriveId("driveId") //
 		.withDriveName("Documents") //
@@ -21,7 +21,7 @@ class SharepointCloudTest {
 
 		assertThat(copy.id(), `is`(42L))
 		assertThat(copy.accessToken(), `is`("accessToken"))
-		assertThat(copy.username(), `is`("user@contoso.com"))
+		assertThat(copy.username(), `is`("pankajhere@outlook.in"))
 		assertThat(copy.siteUrl(), `is`("https://contoso.sharepoint.com/sites/team"))
 		assertThat(copy.driveId(), `is`("driveId"))
 		assertThat(copy.driveName(), `is`("Documents"))
@@ -30,7 +30,7 @@ class SharepointCloudTest {
 	@Test
 	fun testConfigurationMatchesSameUserAndDrive() {
 		val sameDrive = SharepointCloud.aSharepointCloud() //
-			.withUsername("user@contoso.com") //
+			.withUsername("pankajhere@outlook.in") //
 			.withDriveId("driveId") //
 			.build()
 
@@ -46,14 +46,14 @@ class SharepointCloudTest {
 
 	@Test
 	fun testConfigurationDoesNotMatchSameDriveOfOtherUser() {
-		val otherUser = SharepointCloud.aCopyOf(cloud).withId(null).withUsername("other@contoso.com").build()
+		val otherUser = SharepointCloud.aCopyOf(cloud).withId(null).withUsername("other-user").build()
 
 		assertThat(cloud.configurationMatches(otherUser), `is`(false))
 	}
 
 	@Test
 	fun testConfigurationDoesNotMatchOnedriveCloudOfSameUser() {
-		val onedriveCloud = OnedriveCloud.aOnedriveCloud().withUsername("user@contoso.com").build()
+		val onedriveCloud = OnedriveCloud.aOnedriveCloud().withUsername("pankajhere@outlook.in").build()
 
 		assertThat(cloud.configurationMatches(onedriveCloud), `is`(false))
 	}

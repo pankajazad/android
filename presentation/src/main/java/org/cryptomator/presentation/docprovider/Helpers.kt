@@ -51,9 +51,7 @@ internal fun <T> whileUnlocked(vault: Vault, authenticationRequired: (Vault) -> 
 }
 
 /**
- * Like in the app, writing needs a license or a running trial, or for a Hub vault a paid Hub license, which only the vault
- * as it was unlocked knows about, see [unlockedVault]. Asking doesn't record that the trial expired, so that the app still
- * tells the user, see [LicenseEnforcer.peekWriteAccessForVault].
+ * Local app features require no license. Cloud permissions and a vault's explicit read-only state still apply.
  */
 internal fun isWritable(vault: Vault, licenseEnforcer: LicenseEnforcer, unlockedVault: (Vault) -> Vault?): Boolean {
 	return !vault.cloud.isReadOnly() && !vault.isReadOnly && licenseEnforcer.peekWriteAccessForVault(VaultModel(unlockedVault(vault) ?: vault))

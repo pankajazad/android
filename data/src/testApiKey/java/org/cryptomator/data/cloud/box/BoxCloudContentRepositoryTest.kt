@@ -25,7 +25,7 @@ import org.mockito.kotlin.whenever
 
 class BoxCloudContentRepositoryTest {
 
-	private val cloud = BoxCloud.aBoxCloud().withId(1L).withUserId("userId").withUsername("user@example.com").build()
+	private val cloud = BoxCloud.aBoxCloud().withId(1L).withUserId("userId").withUsername("pankajhere@outlook.in").build()
 	private val api = mock<BoxApi>()
 
 	private lateinit var lruCaches: MockedConstruction<LruCache<*, *>>

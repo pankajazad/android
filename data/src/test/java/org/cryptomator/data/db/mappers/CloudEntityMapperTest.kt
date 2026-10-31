@@ -17,7 +17,7 @@ class CloudEntityMapperTest {
 		val cloud = SharepointCloud.aSharepointCloud() //
 			.withId(42L) //
 			.withAccessToken("accessToken") //
-			.withUsername("user@contoso.com") //
+			.withUsername("pankajhere@outlook.in") //
 			.withSiteUrl("https://contoso.sharepoint.com/sites/team") //
 			.withDriveId("driveId") //
 			.withDriveName("Documents") //
@@ -29,7 +29,7 @@ class CloudEntityMapperTest {
 		assertThat(entity.type, `is`(CloudType.SHAREPOINT.name))
 		assertThat(mapped.id(), `is`(42L))
 		assertThat(mapped.accessToken(), `is`("accessToken"))
-		assertThat(mapped.username(), `is`("user@contoso.com"))
+		assertThat(mapped.username(), `is`("pankajhere@outlook.in"))
 		assertThat(mapped.siteUrl(), `is`("https://contoso.sharepoint.com/sites/team"))
 		assertThat(mapped.driveId(), `is`("driveId"))
 		assertThat(mapped.driveName(), `is`("Documents"))
@@ -40,7 +40,7 @@ class CloudEntityMapperTest {
 		val cloud = BoxCloud.aBoxCloud() //
 			.withId(42L) //
 			.withUserId("userId") //
-			.withUsername("user@example.com") //
+			.withUsername("pankajhere@outlook.in") //
 			.build()
 
 		val entity = mapper.toEntity(cloud)
@@ -50,6 +50,6 @@ class CloudEntityMapperTest {
 		assertThat(entity.accessToken, `is`(nullValue()))
 		assertThat(mapped.id(), `is`(42L))
 		assertThat(mapped.userId(), `is`("userId"))
-		assertThat(mapped.username(), `is`("user@example.com"))
+		assertThat(mapped.username(), `is`("pankajhere@outlook.in"))
 	}
 }

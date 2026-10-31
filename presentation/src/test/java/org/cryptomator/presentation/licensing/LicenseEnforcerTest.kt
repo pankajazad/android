@@ -1,27 +1,23 @@
 package org.cryptomator.presentation.licensing
 
 import android.app.Activity
-import android.widget.Toast
-import org.cryptomator.presentation.R
 import org.cryptomator.presentation.model.VaultModel
 import org.cryptomator.util.FlavorConfig
 import org.cryptomator.util.SharedPreferencesHandler
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
-import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
-import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.mockStatic
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 
 class LicenseEnforcerTest {
@@ -34,191 +30,44 @@ class LicenseEnforcerTest {
 		licenseEnforcer = LicenseEnforcer(sharedPreferencesHandler)
 	}
 
-	// -- hasWriteAccess --
-
 	@Test
-	fun `hasWriteAccess returns true when license token is present`() {
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("some-token")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
+	fun `every local action is available without a license and never opens a purchase screen`() {
+		val activity: Activity = mock()
 
-		assertTrue(licenseEnforcer.hasWriteAccess())
+		LicenseEnforcer.LockedAction.entries.forEach { action ->
+			assertTrue(licenseEnforcer.ensureWriteAccess(activity, action), action.name)
+			assertTrue(licenseEnforcer.ensureWriteAccessForVault(activity, null, action), action.name)
+		}
+
+		verifyNoInteractions(activity, sharedPreferencesHandler)
 	}
 
 	@Test
-	fun `hasWriteAccess returns true when subscription is active`() {
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(true)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
-		assertTrue(licenseEnforcer.hasWriteAccess())
-	}
-
-	@Test
-	fun `hasWriteAccess returns true when trial is active`() {
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(System.currentTimeMillis() + 86400000L)
-		`when`(sharedPreferencesHandler.isTrialExpired()).thenReturn(false)
-
-		assertTrue(licenseEnforcer.hasWriteAccess())
-	}
-
-	@Test
-	fun `hasWriteAccess returns false when trial is expired`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `expired trial and revoked purchases cannot remove write access`() {
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
 		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(System.currentTimeMillis() - 1000L)
-		`when`(sharedPreferencesHandler.isTrialExpired()).thenReturn(false)
+		`when`(sharedPreferencesHandler.isTrialExpired()).thenReturn(true)
 
-		assertFalse(licenseEnforcer.hasWriteAccess())
-	}
-
-	@Test
-	fun `hasWriteAccess returns false when no license and no trial and no subscription`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
-		assertFalse(licenseEnforcer.hasWriteAccess())
-	}
-
-	// -- hasWriteAccessForVault --
-
-	@Test
-	fun `hasWriteAccessForVault returns true for non-hub vault with write access`() {
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("some-token")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(false)
-
-		assertTrue(licenseEnforcer.hasWriteAccessForVault(vault))
-	}
-
-	@Test
-	fun `hasWriteAccessForVault returns false for non-hub vault without write access`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(false)
-
-		assertFalse(licenseEnforcer.hasWriteAccessForVault(vault))
-	}
-
-	@Test
-	fun `hasWriteAccessForVault returns true for hub vault with paid license`() {
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(true)
-		`when`(vault.hasHubPaidLicense).thenReturn(true)
-
-		assertTrue(licenseEnforcer.hasWriteAccessForVault(vault))
-	}
-
-	@Test
-	fun `hasWriteAccessForVault returns false for hub vault without paid license and no local license`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(true)
-		`when`(vault.hasHubPaidLicense).thenReturn(false)
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
-		assertFalse(licenseEnforcer.hasWriteAccessForVault(vault))
-	}
-
-	@Test
-	fun `hasWriteAccessForVault returns true for hub vault without paid license but with local license`() {
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(true)
-		`when`(vault.hasHubPaidLicense).thenReturn(false)
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("some-token")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
-		assertTrue(licenseEnforcer.hasWriteAccessForVault(vault))
-	}
-
-	@Test
-	fun `hasWriteAccessForVault returns true for hub vault without paid license but with active trial`() {
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(true)
-		`when`(vault.hasHubPaidLicense).thenReturn(false)
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(System.currentTimeMillis() + 86400000L)
-		`when`(sharedPreferencesHandler.isTrialExpired()).thenReturn(false)
-
-		assertTrue(licenseEnforcer.hasWriteAccessForVault(vault))
-	}
-
-	@Test
-	fun `ensureWriteAccessForVault returns true for hub vault without paid license but with local license`() {
-		val activity: Activity = mock()
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(true)
-		`when`(vault.hasHubPaidLicense).thenReturn(false)
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("some-token")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
-		assertTrue(licenseEnforcer.ensureWriteAccessForVault(activity, vault, LicenseEnforcer.LockedAction.UPLOAD_FILES))
-	}
-
-	@Test
-	fun `hasWriteAccessForVault returns true when vault is null and has write access`() {
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("some-token")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
+		assertTrue(licenseEnforcer.hasWriteAccess())
 		assertTrue(licenseEnforcer.hasWriteAccessForVault(null))
+		assertTrue(licenseEnforcer.peekWriteAccessForVault(null))
+		verifyNoInteractions(sharedPreferencesHandler)
 	}
 
 	@Test
-	fun `hasWriteAccessForVault returns false when vault is null and has no write access`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
-
-		assertFalse(licenseEnforcer.hasWriteAccessForVault(null))
-	}
-
-	// -- ensureWriteAccessForVault --
-
-	@Test
-	fun `ensureWriteAccessForVault returns true for hub vault with paid license`() {
-		val activity: Activity = mock()
-		val vault: VaultModel = mock()
-		`when`(vault.isHubVault).thenReturn(true)
-		`when`(vault.hasHubPaidLicense).thenReturn(true)
-
-		assertTrue(licenseEnforcer.ensureWriteAccessForVault(activity, vault, LicenseEnforcer.LockedAction.UPLOAD_FILES))
-	}
-
-	@Test
-	fun `ensureWriteAccessForVault returns false for hub vault without paid license and no local license`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `Hub vault access requires no local or Hub purchase and opens no purchase activity`() {
 		val activity: Activity = mock()
 		val vault: VaultModel = mock()
 		`when`(vault.isHubVault).thenReturn(true)
 		`when`(vault.hasHubPaidLicense).thenReturn(false)
-		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
-		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
-		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
 
-		mockStatic(Toast::class.java).use { toastMock ->
-			val toast: Toast = mock()
-			toastMock.`when`<Toast> { Toast.makeText(activity, R.string.read_only_reason_hub_inactive, Toast.LENGTH_LONG) }.thenReturn(toast)
-
-			assertFalse(licenseEnforcer.ensureWriteAccessForVault(activity, vault, LicenseEnforcer.LockedAction.UPLOAD_FILES))
-			verify(toast).show()
+		assertTrue(licenseEnforcer.hasWriteAccessForVault(vault))
+		assertTrue(licenseEnforcer.peekWriteAccessForVault(vault))
+		LicenseEnforcer.LockedAction.entries.forEach { action ->
+			assertTrue(licenseEnforcer.ensureWriteAccessForVault(activity, vault, action), action.name)
 		}
+		verifyNoInteractions(activity, sharedPreferencesHandler)
 	}
 
 	// -- hasPaidLicense --
@@ -240,22 +89,20 @@ class LicenseEnforcerTest {
 	}
 
 	@Test
-	fun `hasPaidLicense returns false when only trial is active`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `trial is not recorded as a paid purchase`() {
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
 		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(System.currentTimeMillis() + 86400000L)
 
-		assertFalse(licenseEnforcer.hasPaidLicense())
+		assertEquals(FlavorConfig.isPremiumFlavor, licenseEnforcer.hasPaidLicense())
 	}
 
 	@Test
-	fun `hasPaidLicense returns false when no license and no subscription`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `missing purchases do not become paid licenses`() {
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
 
-		assertFalse(licenseEnforcer.hasPaidLicense())
+		assertEquals(FlavorConfig.isPremiumFlavor, licenseEnforcer.hasPaidLicense())
 	}
 
 	// -- hasActiveTrial --
@@ -439,7 +286,6 @@ class LicenseEnforcerTest {
 
 	@Test
 	fun `evaluateUiState returns active trial with expiration text`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
 		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(System.currentTimeMillis() + 86400000L)
@@ -448,14 +294,13 @@ class LicenseEnforcerTest {
 		val uiState = licenseEnforcer.evaluateUiState()
 
 		assertTrue(uiState.hasWriteAccess)
-		assertFalse(uiState.hasPaidLicense)
+		assertEquals(FlavorConfig.isPremiumFlavor, uiState.hasPaidLicense)
 		assertTrue(uiState.trialState.isActive)
 		assertNotNull(uiState.trialState.formattedExpirationDate)
 	}
 
 	@Test
-	fun `evaluateUiState returns expired trial with expiration date text`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `expired trial metadata does not disable write access`() {
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
 		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(System.currentTimeMillis() - 1000L)
@@ -463,23 +308,22 @@ class LicenseEnforcerTest {
 
 		val uiState = licenseEnforcer.evaluateUiState()
 
-		assertFalse(uiState.hasWriteAccess)
-		assertFalse(uiState.hasPaidLicense)
+		assertTrue(uiState.hasWriteAccess)
+		assertEquals(FlavorConfig.isPremiumFlavor, uiState.hasPaidLicense)
 		assertTrue(uiState.trialState.isExpired)
 		assertNotNull(uiState.trialState.formattedExpirationDate)
 	}
 
 	@Test
-	fun `evaluateUiState returns null expiration text when no trial started`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `fresh install UI has write access without a license or trial`() {
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 		`when`(sharedPreferencesHandler.hasRunningSubscription()).thenReturn(false)
 		`when`(sharedPreferencesHandler.trialExpirationDate()).thenReturn(0L)
 
 		val uiState = licenseEnforcer.evaluateUiState()
 
-		assertFalse(uiState.hasWriteAccess)
-		assertFalse(uiState.hasPaidLicense)
+		assertTrue(uiState.hasWriteAccess)
+		assertEquals(FlavorConfig.isPremiumFlavor, uiState.hasPaidLicense)
 		assertFalse(uiState.trialState.isActive)
 		assertFalse(uiState.trialState.isExpired)
 		assertNull(uiState.trialState.formattedExpirationDate)

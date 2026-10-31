@@ -1,7 +1,6 @@
 package org.cryptomator.presentation.presenter
 
 import android.app.Activity
-import android.os.Bundle
 import org.cryptomator.data.util.NetworkConnectionCheck
 import org.cryptomator.domain.usecases.DoUpdateCheckUseCase
 import org.cryptomator.domain.usecases.DoUpdateUseCase
@@ -21,7 +20,6 @@ import org.cryptomator.presentation.licensing.LicenseEnforcer
 import org.cryptomator.presentation.model.mappers.CloudFolderModelMapper
 import org.cryptomator.presentation.service.ProductPricesCache
 import org.cryptomator.presentation.ui.activity.view.VaultListView
-import org.cryptomator.presentation.ui.dialog.LicenseLostDialog
 import org.cryptomator.presentation.util.FileUtil
 import org.cryptomator.presentation.workflow.AddExistingVaultWorkflow
 import org.cryptomator.presentation.workflow.AuthenticationExceptionHandler
@@ -31,7 +29,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito
 import org.mockito.kotlin.any
-import org.mockito.kotlin.isA
 
 class VaultListPresenterLicenseLostTest {
 
@@ -78,21 +75,19 @@ class VaultListPresenterLicenseLostTest {
 	}
 
 	@Test
-	fun `resumed shows license lost dialog and clears mail when token was lost`() {
-		stubLicense(licenseToken = "", mail = "user@example.com")
+	fun `resumed preserves saved mail and does not request a lost license`() {
+		stubLicense(licenseToken = "", mail = "pankajhere@outlook.in")
 
-		Mockito.mockConstruction(Bundle::class.java).use { bundles ->
-			inTest.resumed()
+		inTest.resumed()
 
-			Mockito.verify(sharedPreferencesHandler).setMail("")
-			Mockito.verify(vaultListView).showDialog(isA<LicenseLostDialog>())
-			Mockito.verify(bundles.constructed().single()).putString("mail", "user@example.com")
-		}
+		Mockito.verify(sharedPreferencesHandler, Mockito.never()).setMail(any())
+		Mockito.verify(vaultListView, Mockito.never()).showDialog(any())
+		Mockito.verify(vaultListView).hideSalePromoBanner()
 	}
 
 	@Test
 	fun `resumed does not show license lost dialog when license token exists`() {
-		stubLicense(licenseToken = "token", mail = "user@example.com")
+		stubLicense(licenseToken = "token", mail = "pankajhere@outlook.in")
 
 		inTest.resumed()
 

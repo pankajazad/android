@@ -14,12 +14,9 @@ import androidx.test.runner.AndroidJUnit4
 import org.cryptomator.domain.Cloud
 import org.cryptomator.domain.Vault
 import org.cryptomator.domain.WebDavCloud
-import org.cryptomator.util.FlavorConfig
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
-import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -28,9 +25,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Calls the provider of the app under test with a locked vault that the test stores, so that a change is refused for the
- * missing license before it gets to the unlock, and asks for the unlock with a license. Restores the license state and
- * removes what it stored afterwards.
+ * Calls the provider of the app under test with a locked vault. Local write features require no license, but every
+ * change still requires unlocking the vault. Restores preference state and removes test data afterwards.
  */
 @RunWith(AndroidJUnit4::class)
 class DocumentsProviderLicenseTest {
@@ -46,7 +42,6 @@ class DocumentsProviderLicenseTest {
 
 	@Before
 	fun storeLockedVault() {
-		assumeFalse("Licensing logic is bypassed on this flavor", FlavorConfig.isPremiumFlavor)
 		cloud = appComponent.cloudRepository().store(WebDavCloud.aWebDavCloudCloud().withUrl("https://example.org/webdav").withUsername("user").withPassword("password").build())
 		vault = appComponent.vaultRepository().store(Vault.aVault().thatIsNew().withName("license-test").withPath("/license-test").withCloud(cloud).withPosition(9999).build())
 		root = "${vault.id}"
@@ -75,16 +70,16 @@ class DocumentsProviderLicenseTest {
 	}
 
 	@Test
-	fun withoutLicenseEveryChangeIsRefusedAndTheVaultOffersNoCreate() {
+	fun withoutLicenseEveryChangeStillRequiresUnlockAndTheVaultOffersCreate() {
 		givenTrialExpired()
 
-		assertReadOnly { provider.createDocument(root, "text/plain", "x.txt") }
-		assertReadOnly { provider.createDocument(root, DocumentsContract.Document.MIME_TYPE_DIR, "d") }
-		assertReadOnly { provider.renameDocument(root, "y") }
-		assertReadOnly { provider.moveDocument(root, root, root) }
-		assertReadOnly { provider.deleteDocument(root) }
-		listOf("w", "wt", "wa", "rw", "rwt").forEach { mode -> assertReadOnly { provider.openDocument(root, mode, null) } }
-		assertEquals(0, rootFlags() and DocumentsContract.Root.FLAG_SUPPORTS_CREATE)
+		assertUnlockRequired { provider.createDocument(root, "text/plain", "x.txt") }
+		assertUnlockRequired { provider.createDocument(root, DocumentsContract.Document.MIME_TYPE_DIR, "d") }
+		assertUnlockRequired { provider.renameDocument(root, "y") }
+		assertUnlockRequired { provider.moveDocument(root, root, root) }
+		assertUnlockRequired { provider.deleteDocument(root) }
+		listOf("w", "wt", "wa", "rw", "rwt").forEach { mode -> assertUnlockRequired { provider.openDocument(root, mode, null) } }
+		assertTrue(rootFlags() and DocumentsContract.Root.FLAG_SUPPORTS_CREATE != 0)
 	}
 
 	@Test
@@ -154,15 +149,6 @@ class DocumentsProviderLicenseTest {
 			}
 		}
 		throw AssertionError("No root for vault $root, is the documents provider turned off?")
-	}
-
-	private fun assertReadOnly(change: () -> Any?) {
-		try {
-			change()
-			fail("Not refused")
-		} catch (e: UnsupportedOperationException) {
-			assertTrue(e.message, e.message?.contains("read-only") == true)
-		}
 	}
 
 	private fun assertUnlockRequired(change: () -> Any?) {

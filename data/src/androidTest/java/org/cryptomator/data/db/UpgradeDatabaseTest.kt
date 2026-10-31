@@ -575,7 +575,7 @@ class UpgradeDatabaseTest {
 				Sql.update("CLOUD_ENTITY")
 					.where("_id", Sql.eq(3L))
 					.set("ACCESS_TOKEN", Sql.toString("Access token 3000"))
-					.set("USERNAME", Sql.toString("foo@bar.baz"))
+					.set("USERNAME", Sql.toString("pankajhere@outlook.in"))
 					.executeOn(db)
 			}
 		}

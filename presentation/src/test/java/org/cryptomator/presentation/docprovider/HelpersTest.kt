@@ -11,14 +11,12 @@ import org.cryptomator.domain.VaultPath
 import org.cryptomator.domain.exception.MissingCryptorException
 import org.cryptomator.domain.exception.NoSuchCloudFileException
 import org.cryptomator.presentation.licensing.LicenseEnforcer
-import org.cryptomator.util.FlavorConfig
 import org.cryptomator.util.SharedPreferencesHandler
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
@@ -136,13 +134,13 @@ class HelpersTest {
 	}
 
 	@Test
-	fun `a vault is read-only once the trial expired without a license, every change is refused, and the app still tells the user`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `a vault remains writable without a license after trial expiry without changing stored state`() {
 		givenLicense(trialExpiration = System.currentTimeMillis() - 1000)
 		val path = vaultPath()
 
-		assertFalse(isWritable(path.vault, licenseEnforcer, locked))
-		assertThrows<UnsupportedOperationException> { requireWritable(path, licenseEnforcer, locked) }
+		assertTrue(isWritable(path.vault, licenseEnforcer, locked))
+		assertSame(path, requireWritable(path, licenseEnforcer, locked))
+		verify(sharedPreferencesHandler, never()).setLicenseToken(any())
 		verify(sharedPreferencesHandler, never()).setTrialExpired(any())
 	}
 
@@ -154,8 +152,7 @@ class HelpersTest {
 	}
 
 	@Test
-	fun `a Hub vault is writable with the paid Hub license its unlock found, without one only with a license of the app`() {
-		assumeTrue(!FlavorConfig.isPremiumFlavor, "Licensing logic is bypassed on this flavor")
+	fun `a Hub vault remains writable regardless of stored purchase state`() {
 		givenLicense()
 		// like a vault the repository loads, which doesn't know about Hub
 		val stored = vaultPath().vault
@@ -163,8 +160,8 @@ class HelpersTest {
 		val unpaid = Vault.aCopyOf(stored).withHubVault(true).withHubPaidLicense(false).build()
 
 		assertTrue(isWritable(stored, licenseEnforcer) { paid })
-		assertFalse(isWritable(stored, licenseEnforcer) { unpaid })
-		assertFalse(isWritable(stored, licenseEnforcer, locked))
+		assertTrue(isWritable(stored, licenseEnforcer) { unpaid })
+		assertTrue(isWritable(stored, licenseEnforcer, locked))
 		givenLicense(token = "token")
 		assertTrue(isWritable(stored, licenseEnforcer) { unpaid })
 	}
@@ -174,6 +171,17 @@ class HelpersTest {
 		givenLicense(token = "token")
 
 		assertFalse(isWritable(vaultPath(readOnlyCloud = true).vault, licenseEnforcer, locked))
+	}
+
+	@Test
+	fun `an explicitly read-only vault refuses writes even without a license requirement`() {
+		val vault: Vault = mock()
+		whenever(vault.cloud).thenReturn(vaultPath().vault.cloud)
+		whenever(vault.isReadOnly).thenReturn(true)
+		val path = VaultPath(vault, "x.txt")
+
+		assertFalse(isWritable(vault, licenseEnforcer, locked))
+		assertThrows<UnsupportedOperationException> { requireWritable(path, licenseEnforcer, locked) }
 	}
 
 	private val locked: (Vault) -> Vault? = { null }

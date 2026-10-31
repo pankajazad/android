@@ -21,11 +21,11 @@ class LicenseEnforcerAccrescentTest {
 	}
 
 	@Test
-	fun `accrescent requires a license for write access`() {
+	fun `accrescent provides write access without a license`() {
 		`when`(sharedPreferencesHandler.licenseToken()).thenReturn("")
 
 		assertFalse(licenseEnforcer.hasPaidLicense())
-		assertFalse(licenseEnforcer.hasWriteAccess())
+		assertTrue(licenseEnforcer.hasWriteAccess())
 	}
 
 	@Test

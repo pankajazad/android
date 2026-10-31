@@ -57,7 +57,7 @@ class CloudConnectionListPresenterTest {
 	private val storedCloud = SharepointCloud.aSharepointCloud() //
 		.withId(42L) //
 		.withAccessToken("oldAccessToken") //
-		.withUsername("user@contoso.com") //
+		.withUsername("pankajhere@outlook.in") //
 		.withSiteUrl("https://contoso.sharepoint.com/sites/team") //
 		.withDriveId("driveId") //
 		.withDriveName("Documents") //

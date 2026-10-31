@@ -6,7 +6,7 @@ We take security seriously at Cryptomator. We appreciate your efforts to respons
 
 To report a security vulnerability, please use the [GitHub Security Advisory feature](https://github.com/cryptomator/android/security/advisories). This feature allows you to privately discuss, fix, and publish information about security vulnerabilities.
 
-If you prefer to report the vulnerability via email, please send an email to security@cryptomator.org.
+If you prefer to report the vulnerability via email, please send an email to pankajhere@outlook.in.
 
 PGP key fingerprint: `3647 9903 B23A E0A5 9359  9A3E 23B5 DBEF 94D4 D81D` ([public key](https://gist.github.com/cryptobot/864300b6b44ae2d2a15abedfe14bd040))
 

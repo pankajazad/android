@@ -19,7 +19,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 
 class BoxApiTest {
 
-	private val cloud = BoxCloud.aBoxCloud().withId(1L).withUserId("userId").withUsername("user@example.com").build()
+	private val cloud = BoxCloud.aBoxCloud().withId(1L).withUserId("userId").withUsername("pankajhere@outlook.in").build()
 	private val responses = CannedResponses()
 	private val tokenStore = mock<BoxTokenStore>()
 	private val inTest = BoxApi(cloud, tokenStore, OkHttpClient.Builder().addInterceptor(responses).build())

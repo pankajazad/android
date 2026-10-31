@@ -1,13 +1,9 @@
 package org.cryptomator.presentation.licensing
 
 import android.app.Activity
-import android.content.Intent
-import android.widget.Toast
 import androidx.annotation.StringRes
 import org.cryptomator.presentation.R
-import org.cryptomator.presentation.intent.Intents
 import org.cryptomator.presentation.model.VaultModel
-import org.cryptomator.presentation.presenter.ContextHolder
 import org.cryptomator.util.FlavorConfig
 import org.cryptomator.util.SharedPreferencesHandler
 import java.text.DateFormat
@@ -37,7 +33,8 @@ class LicenseEnforcer @Inject constructor(private val sharedPreferencesHandler: 
 	}
 
 	fun hasWriteAccess(): Boolean {
-		return hasPaidLicense() || hasActiveTrial()
+		// This fork provides all local features without a purchase, license token, or trial.
+		return true
 	}
 
 	fun hasPaidLicense() =
@@ -93,7 +90,7 @@ class LicenseEnforcer @Inject constructor(private val sharedPreferencesHandler: 
 		val trialState = evaluateTrialState()
 		val paidLicense = hasPaidLicense()
 		return LicenseUiState(
-			hasWriteAccess = paidLicense || trialState.isActive,
+			hasWriteAccess = hasWriteAccess(),
 			hasPaidLicense = paidLicense,
 			hasLifetimeLicense = sharedPreferencesHandler.licenseToken().isNotEmpty(),
 			hasRunningSubscription = sharedPreferencesHandler.hasRunningSubscription(),
@@ -102,42 +99,21 @@ class LicenseEnforcer @Inject constructor(private val sharedPreferencesHandler: 
 	}
 
 	fun ensureWriteAccess(activity: Activity, action: LockedAction): Boolean {
-		if (hasWriteAccess()) {
-			return true
-		}
-
-		val intent = Intents.licenseCheckIntent()
-			.withLockedAction(action.name)
-			.build(activity as ContextHolder)
-		intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-		activity.startActivity(intent)
-		return false
+		return hasWriteAccess()
 	}
 
 	fun hasWriteAccessForVault(vault: VaultModel?): Boolean {
-		if (vault?.isHubVault == true) {
-			return vault.hasHubPaidLicense || hasWriteAccess()
-		}
 		return hasWriteAccess()
 	}
 
 	/**
-	 * Like [hasWriteAccessForVault], but doesn't record that the trial expired, see [evaluateTrialState], so that the app
-	 * still tells the user once it is opened. For callers that don't show the license state, e.g. the documents provider.
+	 * Access for background callers such as the documents provider, without reading or changing trial state.
 	 */
 	fun peekWriteAccessForVault(vault: VaultModel?): Boolean {
-		val writeAccess = hasPaidLicense() || isTrialActive(sharedPreferencesHandler.trialExpirationDate(), System.currentTimeMillis(), sharedPreferencesHandler.isTrialExpired())
-		return writeAccess || (vault?.isHubVault == true && vault.hasHubPaidLicense)
+		return hasWriteAccessForVault(vault)
 	}
 
 	fun ensureWriteAccessForVault(activity: Activity, vault: VaultModel?, action: LockedAction): Boolean {
-		if (vault?.isHubVault == true) {
-			if (hasWriteAccessForVault(vault)) {
-				return true
-			}
-			Toast.makeText(activity, R.string.read_only_reason_hub_inactive, Toast.LENGTH_LONG).show()
-			return false
-		}
 		return ensureWriteAccess(activity, action)
 	}
 
