@@ -175,8 +175,9 @@ class HelpersTest {
 
 	@Test
 	fun `an explicitly read-only vault refuses writes even without a license requirement`() {
+		val cloud = vaultPath().vault.cloud
 		val vault: Vault = mock()
-		whenever(vault.cloud).thenReturn(vaultPath().vault.cloud)
+		whenever(vault.cloud).thenReturn(cloud)
 		whenever(vault.isReadOnly).thenReturn(true)
 		val path = VaultPath(vault, "x.txt")
 
