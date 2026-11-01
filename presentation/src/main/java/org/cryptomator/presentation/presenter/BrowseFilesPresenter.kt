@@ -1588,7 +1588,7 @@ class BrowseFilesPresenter @Inject constructor( //
 			.run(object : DefaultProgressAwareResultHandler<List<CloudFile>, UploadState>() {
 				override fun onProgress(progress: Progress<UploadState>) {
 					if (recursiveImportState === state && !recursiveImportCancelled) {
-						view?.showRecursiveImportProgress(file.relativePath, state.completedItems, state.totalItems, progress.progress())
+						view?.showRecursiveImportProgress(file.relativePath, state.completedItems, state.totalItems, progress.asPercentage())
 					}
 				}
 
