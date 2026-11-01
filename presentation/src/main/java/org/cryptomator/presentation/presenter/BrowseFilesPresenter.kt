@@ -207,7 +207,7 @@ class BrowseFilesPresenter @Inject constructor( //
 	private var recursiveImportState: RecursiveImportState? = null
 	@Volatile private var recursiveImportCancelled = false
 	private var recursiveImportScanThread: Thread? = null
-	private var recursiveImportGeneration = 0
+	@Volatile private var recursiveImportGeneration = 0
 
 	override fun workflows(): Iterable<Workflow<*>> {
 		return listOf(addExistingVaultWorkflow, createNewVaultWorkflow)
