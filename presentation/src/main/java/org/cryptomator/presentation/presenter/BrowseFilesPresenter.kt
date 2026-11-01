@@ -1336,11 +1336,18 @@ class BrowseFilesPresenter @Inject constructor( //
 		val directories = ArrayList<String>()
 		val files = ArrayList<LocalImportFile>()
 		val visitedDocumentIds = HashSet<String>()
+		val pendingDirectories = java.util.ArrayDeque<Pair<String, String>>()
+		pendingDirectories.addLast(rootDocumentId to "")
 		var scannedItems = 0
 
-		fun visit(documentId: String, parentPath: String) {
-			if (isRecursiveImportScanCancelled(generation) || !visitedDocumentIds.add(documentId)) {
-				return
+		// Iterative traversal avoids overflowing the call stack on deeply nested SAF trees.
+		while (pendingDirectories.isNotEmpty()) {
+			if (isRecursiveImportScanCancelled(generation)) {
+				throw InterruptedException("Folder import cancelled")
+			}
+			val (documentId, parentPath) = pendingDirectories.removeLast()
+			if (!visitedDocumentIds.add(documentId)) {
+				continue
 			}
 			val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
 			val cursor = resolver.query(
@@ -1354,48 +1361,40 @@ class BrowseFilesPresenter @Inject constructor( //
 				null,
 				null
 			) ?: throw IllegalStateException("Unable to read selected directory")
+			val childDirectories = ArrayList<Pair<String, String>>()
 			cursor.use {
 				val idColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
 				val nameColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
 				val mimeColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
 				while (it.moveToNext()) {
 					if (isRecursiveImportScanCancelled(generation)) {
-						return
+						throw InterruptedException("Folder import cancelled")
 					}
 					val childId = it.getString(idColumn)
 					val name = it.getString(nameColumn)?.takeIf { value -> value.isNotBlank() } ?: continue
 					val relativePath = if (parentPath.isEmpty()) name else "$parentPath/$name"
 					if (it.getString(mimeColumn) == DocumentsContract.Document.MIME_TYPE_DIR) {
 						directories.add(relativePath)
-						scannedItems++
-						if (scannedItems % 10 == 0 || parentPath.isEmpty()) {
-							onUiThread {
-								view?.showRecursiveImportProgress(relativePath, 0, 0, null)
-							}
-						}
-						visit(childId, relativePath)
+						childDirectories.add(childId to relativePath)
 					} else {
 						files.add(
 							LocalImportFile(
-								relativePath,
-								name,
-								DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+							relativePath,
+							name,
+							DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
 							)
 						)
-						scannedItems++
-						if (scannedItems % 10 == 0) {
-							onUiThread {
-								view?.showRecursiveImportProgress(relativePath, 0, 0, null)
-							}
+					}
+					scannedItems++
+					if (scannedItems % 10 == 0 || parentPath.isEmpty()) {
+						onUiThread {
+							view?.showRecursiveImportProgress(relativePath, 0, 0, null)
 						}
 					}
 				}
 			}
-		}
-
-		visit(rootDocumentId, "")
-		if (isRecursiveImportScanCancelled(generation)) {
-			throw InterruptedException("Folder import cancelled")
+			// Reverse insertion keeps traversal deterministic while using a stack.
+			childDirectories.asReversed().forEach(pendingDirectories::addLast)
 		}
 		return directories to files
 	}
