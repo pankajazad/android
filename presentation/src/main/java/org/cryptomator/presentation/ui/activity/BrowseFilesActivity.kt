@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import androidx.appcompat.app.AlertDialog
 import android.view.Menu
 import android.view.View
 import androidx.activity.OnBackPressedCallback
@@ -49,6 +50,7 @@ import org.cryptomator.presentation.ui.dialog.FileNameDialog
 import org.cryptomator.presentation.ui.dialog.FileTypeNotSupportedDialog
 import org.cryptomator.presentation.ui.dialog.NoDirFileOrEmptyDialog
 import org.cryptomator.presentation.ui.dialog.ReplaceDialog
+import org.cryptomator.presentation.ui.dialog.RecursiveImportProgressDialog
 import org.cryptomator.presentation.ui.dialog.SymLinkDialog
 import org.cryptomator.presentation.ui.dialog.UploadCloudFileDialog
 import org.cryptomator.presentation.ui.fragment.BrowseFilesFragment
@@ -63,6 +65,7 @@ class BrowseFilesActivity : BaseActivity<ActivityLayoutBinding>(ActivityLayoutBi
 	FileNameDialog.Callback, //
 	ConfirmDeleteCloudNodeDialog.Callback, //
 	UploadCloudFileDialog.Callback,
+	RecursiveImportProgressDialog.Callback,
 	ExportCloudFilesDialog.Callback,
 	SymLinkDialog.CallBack,
 	NoDirFileOrEmptyDialog.CallBack,
@@ -337,6 +340,38 @@ class BrowseFilesActivity : BaseActivity<ActivityLayoutBinding>(ActivityLayoutBi
 		showDialog(UploadCloudFileDialog.newInstance(uploadingFiles))
 	}
 
+	override fun showRecursiveImportProgress(currentPath: String, completedItems: Int, totalItems: Int, currentItemProgress: Int?) {
+		val dialog = currentDialog() as? RecursiveImportProgressDialog
+		if (dialog == null) {
+			showDialog(RecursiveImportProgressDialog.newInstance(currentPath, completedItems, totalItems, currentItemProgress))
+		} else {
+			dialog.updateProgress(currentPath, completedItems, totalItems, currentItemProgress)
+		}
+	}
+
+	override fun closeRecursiveImportProgress() {
+		if (currentDialog() is RecursiveImportProgressDialog) {
+			closeDialog()
+		}
+	}
+
+	override fun showRecursiveImportConflict(relativePath: String) {
+		AlertDialog.Builder(this)
+			.setTitle(R.string.dialog_replace_title_single_file_exists)
+			.setMessage(getString(R.string.dialog_replace_msg_single_file_exists, relativePath))
+			.setPositiveButton(R.string.dialog_replace_positive_button_single_file_exists) { _, _ ->
+				browseFilesPresenter.onRecursiveImportConflictResolved(replace = true)
+			}
+			.setNegativeButton(R.string.dialog_replace_negative_button_at_least_two_but_not_all_files_exist) { _, _ ->
+				browseFilesPresenter.onRecursiveImportConflictResolved(replace = false)
+			}
+			.setNeutralButton(R.string.dialog_button_cancel) { _, _ ->
+				browseFilesPresenter.onRecursiveImportConflictCanceled()
+			}
+			.setOnCancelListener { browseFilesPresenter.onRecursiveImportConflictCanceled() }
+			.show()
+	}
+
 	override fun renderedCloudNodes(): List<CloudNodeModel<*>> = browseFilesFragment().renderedCloudNodes()
 
 	override fun onCreateFolderClick(folderName: String) {
@@ -491,6 +526,16 @@ class BrowseFilesActivity : BaseActivity<ActivityLayoutBinding>(ActivityLayoutBi
 		guardWriteAccess(LicenseEnforcer.LockedAction.UPLOAD_FILES, folder) {
 			browseFilesPresenter.onUploadFilesClicked(folder)
 		}
+	}
+
+	override fun onImportFolderClicked(folder: CloudFolderModel) {
+		guardWriteAccess(LicenseEnforcer.LockedAction.UPLOAD_FILES, folder) {
+			browseFilesPresenter.onImportFolderClicked(folder)
+		}
+	}
+
+	override fun onRecursiveImportCanceled() {
+		browseFilesPresenter.onRecursiveImportCanceled()
 	}
 
 	override fun onCreateNewTextFileClicked() {

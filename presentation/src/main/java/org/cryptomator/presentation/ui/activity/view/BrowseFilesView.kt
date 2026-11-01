@@ -22,6 +22,9 @@ interface BrowseFilesView : View {
 	fun showFileTypeNotSupportedDialog(file: CloudFileModel)
 	fun showReplaceDialog(existingFiles: List<String>, size: Int)
 	fun showUploadDialog(uploadingFiles: Int)
+	fun showRecursiveImportProgress(currentPath: String, completedItems: Int, totalItems: Int, currentItemProgress: Int?)
+	fun closeRecursiveImportProgress()
+	fun showRecursiveImportConflict(relativePath: String)
 	fun renderedCloudNodes(): List<CloudNodeModel<*>>
 	fun hasExcludedFolder(): Boolean
 	fun navigateTo(folder: CloudFolderModel)

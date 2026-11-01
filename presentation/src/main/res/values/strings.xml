@@ -189,6 +189,9 @@
 	<string name="screen_file_browser_action_create_folder">Create folder</string>
 	<string name="screen_file_browser_action_create_new_text_file">Create text file</string>
 	<string name="screen_file_browser_action_upload_files">Upload files</string>
+	<string name="screen_file_browser_action_import_folder">Import folder</string>
+	<string name="screen_file_browser_import_folder_completed">Folder import complete (%1$d files).</string>
+	<string name="screen_file_browser_import_folder_empty">The selected folder is empty.</string>
 	<string name="screen_file_browser_upload_files_chooser_title">Files</string>
 
 	<string name="screen_file_browser_msg_file_exported">File exported</string>
@@ -465,6 +468,11 @@
 	<string name="dialog_delete_vault_message">Are you sure you want to remove this vault?</string>
 	<string name="dialog_delete_vault_hint">This action will only remove the vault from this list and not delete it physically.</string>
 
+	<string name="dialog_recursive_import_title">Importing folder&#8230;</string>
+	<string name="dialog_recursive_import_cancel_button">Cancel import</string>
+	<string name="dialog_recursive_import_scanning">Scanning selected folder&#8230;</string>
+	<string name="dialog_recursive_import_progress">Importing files&#8230;</string>
+	<string name="dialog_recursive_import_items">%1$d of %2$d items</string>
 	<string name="dialog_upload_file_title">Uploading&#8230;</string>
 	<string name="dialog_upload_file_cancel_button" translatable="false">@string/dialog_button_cancel</string>
 	<string name="dialog_upload_file_remaining">File %1$d of %2$d</string>

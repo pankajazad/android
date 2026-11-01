@@ -1,6 +1,7 @@
 package org.cryptomator.presentation.ui.bottomsheet
 
 import android.os.Bundle
+import android.view.View
 import org.cryptomator.generator.BottomSheet
 import org.cryptomator.presentation.R
 import org.cryptomator.presentation.databinding.DialogBottomSheetVaultActionBinding
@@ -13,6 +14,7 @@ class VaultContentActionBottomSheet : BaseBottomSheet<VaultContentActionBottomSh
 
 		fun onCreateNewFolderClicked()
 		fun onUploadFilesClicked(folder: CloudFolderModel)
+		fun onImportFolderClicked(folder: CloudFolderModel)
 		fun onCreateNewTextFileClicked()
 	}
 
@@ -27,6 +29,11 @@ class VaultContentActionBottomSheet : BaseBottomSheet<VaultContentActionBottomSh
 		}
 		binding.uploadFiles.setOnClickListener {
 			callback?.onUploadFilesClicked(folder)
+			dismiss()
+		}
+		binding.importFolder.visibility = if (folder.vault() != null) View.VISIBLE else View.GONE
+		binding.importFolder.setOnClickListener {
+			callback?.onImportFolderClicked(folder)
 			dismiss()
 		}
 		binding.createNewTextFile.setOnClickListener {

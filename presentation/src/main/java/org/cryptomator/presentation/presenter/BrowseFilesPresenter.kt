@@ -3,6 +3,8 @@ package org.cryptomator.presentation.presenter
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.widget.Toast
@@ -184,6 +186,27 @@ class BrowseFilesPresenter @Inject constructor( //
 	var openWritableFileNotification: OpenWritableFileNotification? = null
 
 	private var isStartingExternalEditing = false
+
+	private data class LocalImportFile(val relativePath: String, val name: String, val uri: Uri)
+
+	private class RecursiveImportState(
+		val rootFolder: CloudFolderModel,
+		val directories: List<String>,
+		val files: List<LocalImportFile>
+	) {
+		val totalItems: Int = directories.size + files.size
+		val foldersByPath: MutableMap<String, CloudFolderModel> = hashMapOf("" to rootFolder)
+		val nodesByFolderPath: MutableMap<String, MutableList<CloudNode>> = HashMap()
+		var directoryIndex = 0
+		var fileIndex = 0
+		var completedItems = 0
+		var pendingConflictFile: LocalImportFile? = null
+		var cancelled = false
+	}
+
+	private var recursiveImportState: RecursiveImportState? = null
+	@Volatile private var recursiveImportCancelled = false
+	private var recursiveImportScanThread: Thread? = null
 
 	override fun workflows(): Iterable<Workflow<*>> {
 		return listOf(addExistingVaultWorkflow, createNewVaultWorkflow)
@@ -1211,6 +1234,432 @@ class BrowseFilesPresenter @Inject constructor( //
 		exportFile(listOf(downloadFile))
 	}
 
+	
+	fun onImportFolderClicked(folder: CloudFolderModel) {
+		if (folder.vault() == null) {
+			return
+		}
+		uploadLocation = folder
+		recursiveImportCancelled = false
+		val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+			addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+		}
+		try {
+			requestActivityResult(ActivityResultCallbacks.selectedDirectory(), intent)
+		} catch (e: ActivityNotFoundException) {
+			uploadLocation = null
+			view?.showMessage(R.string.screen_cloud_local_error_no_content_provider)
+			Timber.tag("BrowseFilesPresenter").e(e, "Import folder: No ContentProvider on system")
+		}
+	}
+
+	@Callback(dispatchResultOkOnly = false)
+	fun selectedDirectory(result: ActivityResult) {
+		if (!result.isResultOk) {
+			uploadLocation = null
+			return
+		}
+		val treeUri = result.intent().data
+		if (treeUri == null) {
+			uploadLocation = null
+			return
+		}
+		val grantedFlags = result.intent().flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+		try {
+			context().contentResolver.takePersistableUriPermission(
+				treeUri,
+					if (grantedFlags == 0) Intent.FLAG_GRANT_READ_URI_PERMISSION else grantedFlags
+			)
+		} catch (_: SecurityException) {
+			// Some document providers grant only a transient permission. The import can still proceed now.
+		}
+		val targetFolder = uploadLocation ?: view?.folder ?: return
+		view?.showRecursiveImportProgress(getString(R.string.dialog_recursive_import_scanning), 0, 0, null)
+		recursiveImportCancelled = false
+		recursiveImportScanThread = Thread {
+			try {
+				val (directories, files) = scanLocalDirectory(treeUri)
+				activity().runOnUiThread {
+					recursiveImportScanThread = null
+					if (recursiveImportCancelled) {
+						view?.closeRecursiveImportProgress()
+						return@runOnUiThread
+					}
+					val state = RecursiveImportState(
+						targetFolder,
+						directories.sortedWith(compareBy<String> { path -> path.count { it == '/' } }.thenBy { it }),
+						files.sortedBy { it.relativePath }
+					)
+					recursiveImportState = state
+					if (state.totalItems == 0) {
+						uploadLocation = null
+						recursiveImportCancelled = false
+						view?.closeRecursiveImportProgress()
+						view?.showMessage(R.string.screen_file_browser_import_folder_empty)
+					} else {
+						view?.showRecursiveImportProgress(getString(R.string.dialog_recursive_import_scanning), 0, state.totalItems, null)
+						processNextRecursiveImportDirectory()
+					}
+				}
+			} catch (e: Exception) {
+				activity().runOnUiThread {
+					recursiveImportScanThread = null
+					if (!recursiveImportCancelled) {
+						failRecursiveImport(e)
+					} else {
+						view?.closeRecursiveImportProgress()
+					}
+				}
+			}
+		}.apply {
+			name = "RecursiveVaultImportScan"
+			start()
+		}
+	}
+
+	private fun scanLocalDirectory(treeUri: Uri): Pair<List<String>, List<LocalImportFile>> {
+		val resolver = context().contentResolver
+		val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+		val directories = ArrayList<String>()
+		val files = ArrayList<LocalImportFile>()
+		val visitedDocumentIds = HashSet<String>()
+		var scannedItems = 0
+
+		fun visit(documentId: String, parentPath: String) {
+			if (recursiveImportCancelled || !visitedDocumentIds.add(documentId)) {
+				return
+			}
+			val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
+			val cursor = resolver.query(
+				childrenUri,
+				arrayOf(
+					DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+					DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+					DocumentsContract.Document.COLUMN_MIME_TYPE
+				),
+				null,
+				null,
+				null
+			) ?: throw IllegalStateException("Unable to read selected directory")
+			cursor.use {
+				val idColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+				val nameColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+				val mimeColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+				while (it.moveToNext()) {
+					if (recursiveImportCancelled) {
+						return
+					}
+					val childId = it.getString(idColumn)
+					val name = it.getString(nameColumn)?.takeIf { value -> value.isNotBlank() } ?: continue
+					val relativePath = if (parentPath.isEmpty()) name else "$parentPath/$name"
+					if (it.getString(mimeColumn) == DocumentsContract.Document.MIME_TYPE_DIR) {
+						directories.add(relativePath)
+						scannedItems++
+						if (scannedItems % 10 == 0 || parentPath.isEmpty()) {
+							onUiThread {
+								view?.showRecursiveImportProgress(relativePath, 0, 0, null)
+							}
+						}
+						visit(childId, relativePath)
+					} else {
+						files.add(
+							LocalImportFile(
+								relativePath,
+								name,
+								DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+							)
+						)
+						scannedItems++
+						if (scannedItems % 10 == 0) {
+							onUiThread {
+								view?.showRecursiveImportProgress(relativePath, 0, 0, null)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		visit(rootDocumentId, "")
+		if (recursiveImportCancelled) {
+			throw InterruptedException("Folder import cancelled")
+		}
+		return directories to files
+	}
+
+	private fun loadRecursiveImportFolderContents(
+		state: RecursiveImportState,
+		folderPath: String,
+		forceRefresh: Boolean = true,
+		onLoaded: (MutableList<CloudNode>) -> Unit
+	) {
+		if (recursiveImportCancelled || state.cancelled || recursiveImportState !== state) {
+			return
+		}
+		val folder = state.foldersByPath[folderPath]
+		if (folder == null) {
+			failRecursiveImport(IllegalStateException("Missing target folder for $folderPath"))
+			return
+		}
+		listVaultFolderUseCase //
+			.withFolder(folder.toCloudNode()) //
+			.andForceRefresh(forceRefresh) //
+			.run(object : DefaultResultHandler<VaultListing>() {
+				override fun onSuccess(listing: VaultListing) {
+					if (recursiveImportState === state && !recursiveImportCancelled) {
+						val nodes = listing.nodes.toMutableList()
+						state.nodesByFolderPath[folderPath] = nodes
+						onLoaded(nodes)
+					}
+				}
+
+				override fun onError(e: Throwable) {
+					if (recursiveImportState === state && !recursiveImportCancelled) {
+						failRecursiveImport(e)
+					}
+				}
+			})
+	}
+
+	private fun processNextRecursiveImportDirectory() {
+		val state = recursiveImportState ?: return
+		if (recursiveImportCancelled || state.cancelled) {
+			return
+		}
+		if (state.directoryIndex >= state.directories.size) {
+			processNextRecursiveImportFile()
+			return
+		}
+		val directoryPath = state.directories[state.directoryIndex]
+		val parentPath = directoryPath.substringBeforeLast('/', "")
+		val folderName = directoryPath.substringAfterLast('/')
+		val parentFolder = state.foldersByPath[parentPath]
+		if (parentFolder == null) {
+			failRecursiveImport(IllegalStateException("Missing parent folder for $directoryPath"))
+			return
+		}
+		val cachedNodes = state.nodesByFolderPath[parentPath]
+		if (cachedNodes != null) {
+			resolveRecursiveImportDirectory(state, directoryPath, parentPath, folderName, parentFolder, cachedNodes)
+		} else {
+			loadRecursiveImportFolderContents(state, parentPath) { nodes ->
+				resolveRecursiveImportDirectory(state, directoryPath, parentPath, folderName, parentFolder, nodes)
+			}
+		}
+	}
+
+	private fun resolveRecursiveImportDirectory(
+		state: RecursiveImportState,
+		directoryPath: String,
+		parentPath: String,
+		folderName: String,
+		parentFolder: CloudFolderModel,
+		nodes: MutableList<CloudNode>
+	) {
+		val existing = nodes.firstOrNull { it.name == folderName }
+		when (existing) {
+			is CloudFolder -> {
+				state.foldersByPath[directoryPath] = cloudFolderModelMapper.toModel(existing)
+				if (!state.nodesByFolderPath.containsKey(directoryPath)) {
+					state.nodesByFolderPath[directoryPath] = mutableListOf()
+				}
+				completeRecursiveImportItem(state, directoryPath)
+			}
+			is CloudFile -> {
+				failRecursiveImport(IllegalStateException(context().getString(R.string.error_file_or_folder_exists)))
+			}
+			null -> {
+				createFolderUseCase //
+					.withParent(parentFolder.toCloudNode()) //
+					.andFolderName(folderName) //
+					.andOptimistic(false) //
+					.run(object : DefaultResultHandler<CloudFolder>() {
+						override fun onSuccess(cloudFolder: CloudFolder) {
+							if (recursiveImportState !== state || recursiveImportCancelled) {
+								return
+							}
+						val model = cloudFolderModelMapper.toModel(cloudFolder)
+						state.foldersByPath[directoryPath] = model
+						if (!state.nodesByFolderPath.containsKey(directoryPath)) {
+							state.nodesByFolderPath[directoryPath] = mutableListOf()
+						}
+						nodes.add(cloudFolder)
+						completeRecursiveImportItem(state, directoryPath)
+					}
+
+						override fun onError(e: Throwable) {
+							if (recursiveImportState === state && !recursiveImportCancelled) {
+								failRecursiveImport(e)
+							}
+						}
+					})
+			}
+		}
+	}
+
+	private fun processNextRecursiveImportFile() {
+		val state = recursiveImportState ?: return
+		if (recursiveImportCancelled || state.cancelled) {
+			return
+		}
+		if (state.fileIndex >= state.files.size) {
+			finishRecursiveImport(state)
+			return
+		}
+		val file = state.files[state.fileIndex]
+		val parentPath = file.relativePath.substringBeforeLast('/', "")
+		val parentFolder = state.foldersByPath[parentPath]
+		if (parentFolder == null) {
+			failRecursiveImport(IllegalStateException("Missing target folder for ${file.relativePath}"))
+			return
+		}
+		val cachedNodes = state.nodesByFolderPath[parentPath]
+		if (cachedNodes != null) {
+			resolveRecursiveImportFile(state, file, parentPath, cachedNodes)
+		} else {
+			loadRecursiveImportFolderContents(state, parentPath) { nodes ->
+				resolveRecursiveImportFile(state, file, parentPath, nodes)
+			}
+		}
+	}
+
+	private fun resolveRecursiveImportFile(
+		state: RecursiveImportState,
+		file: LocalImportFile,
+		parentPath: String,
+		nodes: MutableList<CloudNode>
+	) {
+		val existing = nodes.firstOrNull { it.name == file.name }
+		when (existing) {
+			is CloudFile -> {
+				state.pendingConflictFile = file
+				view?.showRecursiveImportConflict(file.relativePath)
+			}
+			is CloudFolder -> {
+				// Match the existing upload behavior: a folder occupying the file name is skipped.
+				completeRecursiveImportFile(state, file)
+			}
+			null -> uploadRecursiveImportFile(state, file, replacing = false)
+		}
+	}
+
+	fun onRecursiveImportConflictResolved(replace: Boolean) {
+		val state = recursiveImportState ?: return
+		val file = state.pendingConflictFile ?: return
+		state.pendingConflictFile = null
+		if (replace) {
+			uploadRecursiveImportFile(state, file, replacing = true)
+		} else {
+			completeRecursiveImportFile(state, file)
+		}
+	}
+
+	fun onRecursiveImportConflictCanceled() {
+		cancelRecursiveImport()
+	}
+
+	private fun uploadRecursiveImportFile(state: RecursiveImportState, file: LocalImportFile, replacing: Boolean) {
+		if (recursiveImportCancelled || recursiveImportState !== state) {
+			return
+		}
+		val parentPath = file.relativePath.substringBeforeLast('/', "")
+		val parentFolder = state.foldersByPath[parentPath] ?: run {
+			failRecursiveImport(IllegalStateException("Missing target folder for ${file.relativePath}"))
+			return
+		}
+		view?.showRecursiveImportProgress(file.relativePath, state.completedItems, state.totalItems, 0)
+		uploadFilesUseCase //
+			.withParent(parentFolder.toCloudNode()) //
+			.andFiles(listOf(createUploadFile(file.name, file.uri, replacing))) //
+			.andOptimistic(false) //
+			.run(object : DefaultProgressAwareResultHandler<List<CloudFile>, UploadState>() {
+				override fun onProgress(progress: Progress<UploadState>) {
+					if (recursiveImportState === state && !recursiveImportCancelled) {
+						view?.showRecursiveImportProgress(file.relativePath, state.completedItems, state.totalItems, progress.progress())
+					}
+				}
+
+				override fun onSuccess(uploadedFiles: List<CloudFile>) {
+					if (recursiveImportState !== state || recursiveImportCancelled) {
+						return
+					}
+					val nodes = state.nodesByFolderPath.getOrPut(parentPath) { mutableListOf() }
+					nodes.removeAll { it.name == file.name }
+					nodes.addAll(uploadedFiles)
+					completeRecursiveImportFile(state, file)
+				}
+
+				override fun onError(e: Throwable) {
+					if (recursiveImportState !== state || recursiveImportCancelled) {
+						return
+					}
+					if (ExceptionUtil.contains(e, CloudNodeAlreadyExistsException::class.java)) {
+						state.pendingConflictFile = file
+						view?.showRecursiveImportConflict(file.relativePath)
+					} else {
+						failRecursiveImport(e)
+					}
+				}
+			})
+	}
+
+	private fun completeRecursiveImportItem(state: RecursiveImportState, path: String) {
+		state.completedItems++
+		view?.showRecursiveImportProgress(path, state.completedItems, state.totalItems, null)
+		state.directoryIndex++
+		Handler(Looper.getMainLooper()).post { processNextRecursiveImportDirectory() }
+	}
+
+	private fun completeRecursiveImportFile(state: RecursiveImportState, file: LocalImportFile) {
+		state.completedItems++
+		state.fileIndex++
+		view?.showRecursiveImportProgress(file.relativePath, state.completedItems, state.totalItems, null)
+		Handler(Looper.getMainLooper()).post { processNextRecursiveImportFile() }
+	}
+
+	private fun finishRecursiveImport(state: RecursiveImportState) {
+		if (recursiveImportState !== state || recursiveImportCancelled) {
+			return
+		}
+		view?.showRecursiveImportProgress("", state.totalItems, state.totalItems, 100)
+		recursiveImportState = null
+		recursiveImportCancelled = false
+		recursiveImportScanThread = null
+		uploadLocation = null
+		view?.closeRecursiveImportProgress()
+		view?.showMessage(R.string.screen_file_browser_import_folder_completed, state.files.size)
+		if (view?.folder?.vault() != null) {
+			listVaultFolder(forceRefresh = true)
+		}
+	}
+
+	private fun failRecursiveImport(error: Throwable) {
+		recursiveImportCancelled = true
+		recursiveImportState?.cancelled = true
+		recursiveImportScanThread?.interrupt()
+		recursiveImportScanThread = null
+		recursiveImportState = null
+		uploadLocation = null
+		uploadFilesUseCase.cancel()
+		view?.closeRecursiveImportProgress()
+		showError(error)
+	}
+
+	private fun cancelRecursiveImport() {
+		recursiveImportCancelled = true
+		recursiveImportState?.cancelled = true
+		recursiveImportScanThread?.interrupt()
+		recursiveImportScanThread = null
+		recursiveImportState = null
+		uploadLocation = null
+		uploadFilesUseCase.cancel()
+		view?.closeRecursiveImportProgress()
+	}
+
+	fun onRecursiveImportCanceled() {
+		cancelRecursiveImport()
+	}
+
 	fun onUploadFilesClicked(folder: CloudFolderModel) {
 		uploadLocation = folder
 		var intent = Intent(Intent.ACTION_GET_CONTENT)
@@ -1222,7 +1671,11 @@ class BrowseFilesPresenter @Inject constructor( //
 	}
 
 	fun onUploadCanceled() {
-		uploadFilesUseCase.cancel()
+		if (recursiveImportState != null || recursiveImportScanThread != null) {
+			cancelRecursiveImport()
+		} else {
+			uploadFilesUseCase.cancel()
+		}
 	}
 
 	@Callback
