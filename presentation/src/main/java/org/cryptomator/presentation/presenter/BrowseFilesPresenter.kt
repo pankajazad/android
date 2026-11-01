@@ -1240,6 +1240,8 @@ class BrowseFilesPresenter @Inject constructor( //
 			return
 		}
 		uploadLocation = folder
+		recursiveImportState = null
+		recursiveImportScanThread = null
 		recursiveImportCancelled = false
 		val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
 			addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -1292,6 +1294,7 @@ class BrowseFilesPresenter @Inject constructor( //
 					)
 					recursiveImportState = state
 					if (state.totalItems == 0) {
+						recursiveImportState = null
 						uploadLocation = null
 						recursiveImportCancelled = false
 						view?.closeRecursiveImportProgress()
@@ -1460,9 +1463,7 @@ class BrowseFilesPresenter @Inject constructor( //
 		when (existing) {
 			is CloudFolder -> {
 				state.foldersByPath[directoryPath] = cloudFolderModelMapper.toModel(existing)
-				if (!state.nodesByFolderPath.containsKey(directoryPath)) {
-					state.nodesByFolderPath[directoryPath] = mutableListOf()
-				}
+				// Existing folders are listed lazily so file conflicts inside them are detected.
 				completeRecursiveImportItem(state, directoryPath)
 			}
 			is CloudFile -> {
