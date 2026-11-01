@@ -1388,7 +1388,10 @@ class BrowseFilesPresenter @Inject constructor( //
 					scannedItems++
 					if (scannedItems % 10 == 0 || parentPath.isEmpty()) {
 						onUiThread {
-							view?.showRecursiveImportProgress(relativePath, 0, 0, null)
+							// Ignore progress queued by a scan that was cancelled or superseded.
+							if (generation == recursiveImportGeneration && !recursiveImportCancelled) {
+								view?.showRecursiveImportProgress(relativePath, 0, 0, null)
+							}
 						}
 					}
 				}
