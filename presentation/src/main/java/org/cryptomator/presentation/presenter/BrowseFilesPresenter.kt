@@ -207,6 +207,7 @@ class BrowseFilesPresenter @Inject constructor( //
 	private var recursiveImportState: RecursiveImportState? = null
 	@Volatile private var recursiveImportCancelled = false
 	private var recursiveImportScanThread: Thread? = null
+	private var recursiveImportGeneration = 0
 
 	override fun workflows(): Iterable<Workflow<*>> {
 		return listOf(addExistingVaultWorkflow, createNewVaultWorkflow)
@@ -1239,6 +1240,8 @@ class BrowseFilesPresenter @Inject constructor( //
 		if (folder.vault() == null) {
 			return
 		}
+		recursiveImportScanThread?.interrupt()
+		recursiveImportGeneration++
 		uploadLocation = folder
 		recursiveImportState = null
 		recursiveImportScanThread = null
@@ -1276,12 +1279,16 @@ class BrowseFilesPresenter @Inject constructor( //
 			// Some document providers grant only a transient permission. The import can still proceed now.
 		}
 		val targetFolder = uploadLocation ?: view?.folder ?: return
+		val generation = recursiveImportGeneration
 		view?.showRecursiveImportProgress(getString(R.string.dialog_recursive_import_scanning), 0, 0, null)
 		recursiveImportCancelled = false
 		recursiveImportScanThread = Thread {
 			try {
-				val (directories, files) = scanLocalDirectory(treeUri)
+				val (directories, files) = scanLocalDirectory(treeUri, generation)
 				activity().runOnUiThread {
+					if (generation != recursiveImportGeneration) {
+						return@runOnUiThread
+					}
 					recursiveImportScanThread = null
 					if (recursiveImportCancelled) {
 						view?.closeRecursiveImportProgress()
@@ -1306,6 +1313,9 @@ class BrowseFilesPresenter @Inject constructor( //
 				}
 			} catch (e: Exception) {
 				activity().runOnUiThread {
+					if (generation != recursiveImportGeneration) {
+						return@runOnUiThread
+					}
 					recursiveImportScanThread = null
 					if (!recursiveImportCancelled) {
 						failRecursiveImport(e)
@@ -1320,7 +1330,7 @@ class BrowseFilesPresenter @Inject constructor( //
 		}
 	}
 
-	private fun scanLocalDirectory(treeUri: Uri): Pair<List<String>, List<LocalImportFile>> {
+	private fun scanLocalDirectory(treeUri: Uri, generation: Int): Pair<List<String>, List<LocalImportFile>> {
 		val resolver = context().contentResolver
 		val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
 		val directories = ArrayList<String>()
@@ -1329,7 +1339,7 @@ class BrowseFilesPresenter @Inject constructor( //
 		var scannedItems = 0
 
 		fun visit(documentId: String, parentPath: String) {
-			if (recursiveImportCancelled || !visitedDocumentIds.add(documentId)) {
+			if (isRecursiveImportScanCancelled(generation) || !visitedDocumentIds.add(documentId)) {
 				return
 			}
 			val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
@@ -1349,7 +1359,7 @@ class BrowseFilesPresenter @Inject constructor( //
 				val nameColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
 				val mimeColumn = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
 				while (it.moveToNext()) {
-					if (recursiveImportCancelled) {
+					if (isRecursiveImportScanCancelled(generation)) {
 						return
 					}
 					val childId = it.getString(idColumn)
@@ -1384,10 +1394,14 @@ class BrowseFilesPresenter @Inject constructor( //
 		}
 
 		visit(rootDocumentId, "")
-		if (recursiveImportCancelled) {
+		if (isRecursiveImportScanCancelled(generation)) {
 			throw InterruptedException("Folder import cancelled")
 		}
 		return directories to files
+	}
+
+	private fun isRecursiveImportScanCancelled(generation: Int): Boolean {
+		return recursiveImportCancelled || generation != recursiveImportGeneration || Thread.currentThread().isInterrupted
 	}
 
 	private fun loadRecursiveImportFolderContents(
@@ -1443,10 +1457,10 @@ class BrowseFilesPresenter @Inject constructor( //
 		}
 		val cachedNodes = state.nodesByFolderPath[parentPath]
 		if (cachedNodes != null) {
-			resolveRecursiveImportDirectory(state, directoryPath, parentPath, folderName, parentFolder, cachedNodes)
+			resolveRecursiveImportDirectory(state, directoryPath, folderName, parentFolder, cachedNodes)
 		} else {
 			loadRecursiveImportFolderContents(state, parentPath) { nodes ->
-				resolveRecursiveImportDirectory(state, directoryPath, parentPath, folderName, parentFolder, nodes)
+				resolveRecursiveImportDirectory(state, directoryPath, folderName, parentFolder, nodes)
 			}
 		}
 	}
@@ -1454,7 +1468,6 @@ class BrowseFilesPresenter @Inject constructor( //
 	private fun resolveRecursiveImportDirectory(
 		state: RecursiveImportState,
 		directoryPath: String,
-		parentPath: String,
 		folderName: String,
 		parentFolder: CloudFolderModel,
 		nodes: MutableList<CloudNode>
@@ -1516,10 +1529,10 @@ class BrowseFilesPresenter @Inject constructor( //
 		}
 		val cachedNodes = state.nodesByFolderPath[parentPath]
 		if (cachedNodes != null) {
-			resolveRecursiveImportFile(state, file, parentPath, cachedNodes)
+			resolveRecursiveImportFile(state, file, cachedNodes)
 		} else {
 			loadRecursiveImportFolderContents(state, parentPath) { nodes ->
-				resolveRecursiveImportFile(state, file, parentPath, nodes)
+				resolveRecursiveImportFile(state, file, nodes)
 			}
 		}
 	}
@@ -1527,7 +1540,6 @@ class BrowseFilesPresenter @Inject constructor( //
 	private fun resolveRecursiveImportFile(
 		state: RecursiveImportState,
 		file: LocalImportFile,
-		parentPath: String,
 		nodes: MutableList<CloudNode>
 	) {
 		val existing = nodes.firstOrNull { it.name == file.name }
@@ -1635,6 +1647,7 @@ class BrowseFilesPresenter @Inject constructor( //
 	}
 
 	private fun failRecursiveImport(error: Throwable) {
+		recursiveImportGeneration++
 		recursiveImportCancelled = true
 		recursiveImportState?.cancelled = true
 		recursiveImportScanThread?.interrupt()
@@ -1647,6 +1660,7 @@ class BrowseFilesPresenter @Inject constructor( //
 	}
 
 	private fun cancelRecursiveImport() {
+		recursiveImportGeneration++
 		recursiveImportCancelled = true
 		recursiveImportState?.cancelled = true
 		recursiveImportScanThread?.interrupt()

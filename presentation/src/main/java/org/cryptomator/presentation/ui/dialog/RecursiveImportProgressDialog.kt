@@ -59,6 +59,13 @@ class RecursiveImportProgressDialog : BaseDialog<RecursiveImportProgressDialog.C
 		}
 	}
 
+	override fun onDismiss(dialog: DialogInterface) {
+		super.onDismiss(dialog)
+		if (activity != null) {
+			enableOrientationChange(true)
+		}
+	}
+
 	fun updateProgress(currentPath: String, completedItems: Int, totalItems: Int, currentItemProgress: Int?) {
 		val update = ImportProgress(currentPath, completedItems, totalItems, currentItemProgress)
 		if (!bindingReady) {
